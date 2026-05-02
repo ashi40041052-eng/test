@@ -1,25 +1,60 @@
-<!doctype html><html lang='ja'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>アイドルオーディション</title><link rel='stylesheet' href='styles.css'></head><body>
-<div class='lp'>
-<section class='hero'>
-  <div class='hero-inner'>
-    <h1>なりたい自分に、<br>会いにいこう。</h1>
-    <p class='ribbon'>アイドルオーディション</p>
-    <ul class='badges'><li>13〜28歳対象</li><li>参加費無料</li><li>応募者全員面談</li><li>経験不問</li></ul>
-    <a class='cta' href='#entry'>今すぐエントリーする</a>
-  </div>
-</section>
-<main class='wrap'>
-<section class='about card'>
-<p class='en'>ABOUT</p><h2>このオーディションで見ていること</h2><p class='lead'>＼ うまいかどうか、よりも「光るもの」を見たい。 ／</p>
-<div class='about-grid'><div>
-<div class='pt'><b>Point.1 今の完成度より、“伸びしろ”</b><p>歌・ダンスが未経験でも大丈夫。今できることより、吸収力や熱量を見ます。</p></div>
-<div class='pt'><b>Point.2 ステージに立ちたい理由</b><p>「誰に、どんな気持ちを届けたいか」。言葉にできる想いを大切にします。</p></div>
-<div class='pt'><b>Point.3 発信できる人</b><p>SNSは上手さより継続。あなたらしい見せ方を一緒に作っていきます。</p></div>
-</div><div class='thumb'><img src='assets/about-stage-visual.svg' alt='動画サムネ'><span>▶</span></div></div>
-</section>
-<section class='organizer card'><h2>主催事務所：BitStar（ビットスター）</h2><div class='org'><img src='assets/bitstar-card.svg' alt='BitStar'><p>BitStarはインフルエンサー／クリエイター領域に強い事務所です。SNS運用・コンテンツ企画を活かし、あなたの魅力が伝わる導線を一緒に作っていきます。<br><br>「合格して終わり」ではなく、SNSでのファンづくり〜イベントやお仕事の機会づくりまで支援します。</p></div></section>
-<section class='two'><section class='card'><h2>参加条件</h2><ul><li>経験ゼロでもOK、未経験歓迎！</li><li>13〜28歳の男女</li><li>アイドル活動に興味がある</li><li>歌・ダンス・表現が好き</li><li>SNSが好き</li><li>無所属の方</li><li>東京/大阪会場に参加可能</li></ul></section>
-<section class='card'><h2>FLOW 応募の流れ</h2><ol><li><b>STEP.1 LINE追加</b><p>必要事項を入力してエントリー。</p></li><li><b>STEP.2 オーディション参加</b><p>個性・目標・適性を審査。</p></li><li><b>STEP.3 合格通知</b><p>活動開始へ向けてバックアップ。</p></li></ol></section></section>
-<section class='card caution'><h2>注意事項</h2><div class='icons'><span>交通費自己負担</span><span>保護者同意</span><span>本人同意</span><span>LINE連絡必須</span><span>録音撮影禁止</span><span>直接訪問不可</span></div></section>
-<section id='entry' class='entry'><div class='photos'><img src='assets/photo-left.svg' alt='left'><img src='assets/photo-right.svg' alt='right'></div><p>世界に、あなたの輝きを。</p><a class='cta' href='https://lin.ee/xxxxxxxx'>今すぐエントリーする</a></section>
-</main></div></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>アイドルオーディション LP</title>
+  <style>
+    :root {
+      --bg: #fff5fb;
+      --max-width: 1400px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+    }
+
+    .lp-wrap {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .lp-image {
+      width: 100%;
+      max-width: var(--max-width);
+      height: auto;
+      display: block;
+    }
+
+    @media (min-width: 1200px) {
+      .lp-wrap {
+        padding: 16px 0 32px;
+      }
+
+      .lp-image {
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(255, 105, 180, 0.18);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="lp-wrap">
+    <img
+      class="lp-image"
+      src="assets/lp-hero-visual.svg"
+      alt="アイドルオーディション ランディングページ"
+      loading="eager"
+      fetchpriority="high"
+    />
+  </main>
+</body>
+</html>
