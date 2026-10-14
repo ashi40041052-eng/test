@@ -3,7 +3,7 @@
  * Link Vault processor (runs on your PC a few times a day).
  *
  *  1. git pull the data repository
- *  2. for each link without an analysis: fetch the page, ask Claude to summarize + categorize
+ *  2. for each link without an analysis: fetch the page, ask Claude (Claude Code CLI or API) to summarize + categorize
  *  3. regenerate index.json (dashboard) and knowledge/*.md (for AI to read)
  *  4. git commit + push
  *
@@ -22,7 +22,9 @@ import { fetchContent } from './lib/fetch-content.mjs';
 import { buildOutputs } from './lib/build.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Failed links are retried on every run up to MAX_ATTEMPTS, then once a day (forever).
 const MAX_ATTEMPTS = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ---------- config ----------
 
@@ -33,9 +35,14 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 
+// "claude-code" (default): Claude Code CLI with your Pro/Max subscription, no API charges.
+// "api": Claude API with ANTHROPIC_API_KEY, billed per use.
+const BACKEND = process.env.LV_BACKEND || 'claude-code';
 const CONFIG = {
   dataDir: path.resolve(opt('--data') || process.env.LV_DATA_DIR || ''),
-  model: process.env.LV_MODEL || 'claude-opus-5-5',
+  backend: BACKEND,
+  model: process.env.LV_MODEL || (BACKEND === 'api' ? 'claude-opus-5-5' : 'opus'),
+  claudeBin: process.env.LV_CLAUDE_BIN || 'claude',
   maxPerRun: Number(opt('--max') || process.env.LV_MAX_PER_RUN || 60),
   useAi: !flag('--no-ai'),
   useGit: !flag('--no-git') && process.env.LV_NO_GIT !== '1',
@@ -154,7 +161,8 @@ async function main() {
   if (!CONFIG.dataDir || !fssync.existsSync(CONFIG.dataDir)) {
     throw new Error('データリポジトリのパスが未設定です。processor/.env の LV_DATA_DIR を設定してください');
   }
-  if (CONFIG.useAi && !process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+  if (!['claude-code', 'api'].includes(CONFIG.backend)) throw new Error(`LV_BACKEND は claude-code か api を指定してください: ${CONFIG.backend}`);
+  if (CONFIG.useAi && CONFIG.backend === 'api' && !process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
     log('WARN: ANTHROPIC_API_KEY が未設定です。SDKの他の認証方法（ant auth login）を試します');
   }
   if (!acquireLock()) { log('another run is in progress; exiting'); return; }
@@ -188,50 +196,60 @@ async function main() {
 
     const todo = records.filter((r) => {
       const a = analyses.get(r.id);
-      return !a || (a.status === 'failed' && (a.attempts || 0) < MAX_ATTEMPTS);
+      if (!a) return true;
+      if (a.status !== 'failed') return false;
+      return (a.attempts || 0) < MAX_ATTEMPTS || Date.now() - new Date(a.analyzed_at).getTime() > DAY_MS;
     });
-    log(`records=${records.length} todo=${todo.length} model=${CONFIG.model} ai=${CONFIG.useAi}`);
+    log(`records=${records.length} todo=${todo.length} backend=${CONFIG.backend} model=${CONFIG.model} ai=${CONFIG.useAi}`);
 
     let analyzed = 0, failed = 0;
     if (CONFIG.useAi && todo.length) {
-      const { createAnalyzer } = await import('./lib/analyze.mjs');
-      const analyze = createAnalyzer({ model: CONFIG.model });
-      for (const r of todo.slice(0, CONFIG.maxPerRun)) {
-        const prev = analyses.get(r.id);
-        const content = await fetchContent(r.url);
-        try {
-          const out = await analyze({ record: r, content, categories });
-          if (!categories.some((c) => c.name === out.category)) {
-            categories.push({ name: out.category, description: out.new_category_description || '', created_at: new Date().toISOString() });
-            log(`new category: ${out.category}`);
+      const analyzer = CONFIG.backend === 'api'
+        ? (await import('./lib/analyze.mjs')).createApiAnalyzer({ model: CONFIG.model })
+        : (await import('./lib/analyze-claude-code.mjs')).createClaudeCodeAnalyzer({ model: CONFIG.model, bin: CONFIG.claudeBin });
+      const queue = todo.slice(0, CONFIG.maxPerRun);
+      for (let i = 0; i < queue.length; i += analyzer.batchSize) {
+        const batch = [];
+        for (const r of queue.slice(i, i + analyzer.batchSize)) batch.push({ record: r, content: await fetchContent(r.url) });
+        // Categories are updated between batches so later batches reuse new ones.
+        const results = await analyzer.analyzeBatch(batch, categories);
+        for (const { record: r, content } of batch) {
+          const prev = analyses.get(r.id);
+          try {
+            const out = results.get(r.id);
+            if (!out || out instanceof Error) throw out || new Error('no result');
+            if (!categories.some((c) => c.name === out.category)) {
+              categories.push({ name: out.category, description: out.new_category_description || '', created_at: new Date().toISOString() });
+              log(`new category: ${out.category}`);
+            }
+            const { new_category_description, model, ...rest } = out;
+            const a = {
+              id: r.id,
+              status: 'analyzed',
+              analyzed_at: new Date().toISOString(),
+              ...rest,
+              source: {
+                source_type: content.source_type,
+                fetched: !!content.ok,
+                title: content.title || null,
+                author: content.author || null,
+                published_at: content.published_at || null,
+                final_url: content.final_url || null,
+                fetch_error: content.ok ? null : content.error,
+              },
+              model,
+            };
+            analyses.set(r.id, a);
+            await saveAnalysis(dir, a);
+            analyzed++;
+            log(`analyzed ${r.id} -> [${a.category}] ${a.title}`);
+          } catch (e) {
+            const a = { id: r.id, status: 'failed', attempts: (prev?.attempts || 0) + 1, error: String(e.message || e), analyzed_at: new Date().toISOString() };
+            analyses.set(r.id, a);
+            await saveAnalysis(dir, a);
+            failed++;
+            log(`FAILED ${r.id} (attempt ${a.attempts}): ${a.error}`);
           }
-          const { new_category_description, model, ...rest } = out;
-          const a = {
-            id: r.id,
-            status: 'analyzed',
-            analyzed_at: new Date().toISOString(),
-            ...rest,
-            source: {
-              source_type: content.source_type,
-              fetched: !!content.ok,
-              title: content.title || null,
-              author: content.author || null,
-              published_at: content.published_at || null,
-              final_url: content.final_url || null,
-              fetch_error: content.ok ? null : content.error,
-            },
-            model,
-          };
-          analyses.set(r.id, a);
-          await saveAnalysis(dir, a);
-          analyzed++;
-          log(`analyzed ${r.id} -> [${a.category}] ${a.title}`);
-        } catch (e) {
-          const a = { id: r.id, status: 'failed', attempts: (prev?.attempts || 0) + 1, error: String(e.message || e), analyzed_at: new Date().toISOString() };
-          analyses.set(r.id, a);
-          await saveAnalysis(dir, a);
-          failed++;
-          log(`FAILED ${r.id} (${a.attempts}/${MAX_ATTEMPTS}): ${a.error}`);
         }
       }
     }

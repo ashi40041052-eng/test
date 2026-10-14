@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const run = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-test('process.mjs analyzes new links and never touches links/', async () => {
+test('api backend: analyzes new links and never touches links/', async () => {
   const requests = [];
   const server = http.createServer((req, res) => {
     let body = '';
@@ -45,7 +45,7 @@ test('process.mjs analyzes new links and never touches links/', async () => {
   await fs.writeFile(linkFile, raw);
 
   try {
-    const env = { ...process.env, ANTHROPIC_BASE_URL: base, ANTHROPIC_API_KEY: 'test', LV_DATA_DIR: dir };
+    const env = { ...process.env, LV_BACKEND: 'api', ANTHROPIC_BASE_URL: base, ANTHROPIC_API_KEY: 'test', LV_DATA_DIR: dir };
     await run(process.execPath, [path.join(HERE, '..', 'process.mjs'), '--no-git'], { env });
 
     assert.equal(await fs.readFile(linkFile, 'utf8'), raw, 'raw link file must be unchanged');
@@ -72,6 +72,48 @@ test('process.mjs analyzes new links and never touches links/', async () => {
     assert.equal(requests.length, 1);
   } finally {
     server.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('claude-code backend: batches links through the CLI without an API key', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lv-e2e-cc-'));
+  const logFile = path.join(dir, 'fake-claude.log');
+  const ids = [];
+  for (let i = 0; i < 10; i++) {
+    const id = `20261014-0102${String(i).padStart(2, '0')}-cc00000${i}`;
+    ids.push(id);
+    const f = path.join(dir, 'links', '2026', '10', `${id}.json`);
+    await fs.mkdir(path.dirname(f), { recursive: true });
+    await fs.writeFile(f, JSON.stringify({ id, url: null, note: `メモ${i}`, created_at: `2026-10-14T10:02:${String(i).padStart(2, '0')}+09:00` }));
+  }
+  try {
+    const env = {
+      ...process.env,
+      LV_BACKEND: 'claude-code',
+      LV_CLAUDE_BIN: path.join(HERE, 'fake-claude.mjs'),
+      FAKE_CLAUDE_LOG: logFile,
+      ANTHROPIC_API_KEY: 'must-not-reach-claude',
+      LV_DATA_DIR: dir,
+    };
+    await run(process.execPath, [path.join(HERE, '..', 'process.mjs'), '--no-git'], { env });
+
+    const calls = (await fs.readFile(logFile, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(calls.length, 2, '10 links -> 2 batches of up to 8');
+    for (const c of calls) {
+      assert.equal(c.hasApiKey, false, 'API key must be removed so the subscription is used');
+      assert.ok(c.argv.includes('-p') && c.argv.includes('--json-schema'));
+      assert.equal(c.argv[c.argv.indexOf('--model') + 1], 'opus');
+      assert.equal(c.argv[c.argv.indexOf('--tools') + 1], '');
+    }
+    assert.match(calls[1].input, /- AI活用: AIの使い方/, 'second batch sees the category created by the first');
+
+    const index = JSON.parse(await fs.readFile(path.join(dir, 'index.json'), 'utf8'));
+    assert.equal(index.items.length, 10);
+    assert.ok(index.items.every((i) => i.status === 'analyzed' && i.category === 'AI活用'));
+    const cats = JSON.parse(await fs.readFile(path.join(dir, 'categories.json'), 'utf8'));
+    assert.equal(cats.length, 1);
+  } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
 });

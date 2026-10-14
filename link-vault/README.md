@@ -23,7 +23,7 @@ PC が 1 日数回 AI（Claude）で中身を読んで要約し、**時系列**�
 | 送信途中で切れた | 1リンク=1ファイル・ユニークID・**新規作成のみ**なので、再送しても重複・上書きは起きない（既に届いていたら成功扱い） |
 | 送信後 | 端末のデータは**削除しない**（送信済みの印を付けるだけ）。設定から JSON で書き出しも可能 |
 | サーバー側 | GitHub の git 履歴に全部残る。PC にもクローン（完全コピー）がある |
-| AI 処理 | `links/` は**読むだけ**で絶対に書き換えない。分析結果は別フォルダ。失敗しても元データは無傷で、次回再挑戦（3回まで） |
+| AI 処理 | `links/` は**読むだけ**で絶対に書き換えない。分析結果は別フォルダ。失敗しても元データは無傷で、次回以降に自動で再挑戦 |
 | 端末のデータ消去対策 | 起動時にストレージ永続化を要求。IndexedDB が消えても localStorage の控えから自動復元 |
 
 > iPhone は「ホーム画面に追加」して使ってください。Safari のタブのままだと、長期間開かないとブラウザがデータを消すことがあります（ホーム画面アプリは対象外）。
@@ -64,16 +64,25 @@ GitHub → Settings → Developer settings → **Fine-grained personal access to
 
 ### 4. PC 側（AI 分析）
 
-必要なもの: [Node.js](https://nodejs.org/) 20.12 以上、git、[Claude API キー](https://console.anthropic.com/)
+必要なもの: [Node.js](https://nodejs.org/) 20.12 以上、git、[Claude Code](https://code.claude.com/)（Claude の Pro / Max プランでログイン）
+
+分析は PC の Claude Code にサブスクのまま任せるので、**API キーも追加料金も不要**です。
 
 ```bash
+# Claude Code をまだ入れていなければ（Windows は公式サイトのインストーラー手順に従う）
+curl -fsSL https://claude.ai/install.sh | bash
+claude          # 起動したら /login で「Claude アカウント（Pro/Max）」でログイン → /exit
+
 git clone https://github.com/<ユーザー名>/link-vault-data.git   # データリポジトリ
 cd <このリポジトリ>/link-vault/processor
 npm install
 cp .env.example .env    # Windows: copy .env.example .env
 ```
 
-`.env` に `ANTHROPIC_API_KEY` と `LV_DATA_DIR`（上でクローンしたフォルダのパス）を記入。
+`.env` の `LV_DATA_DIR` に、上でクローンしたフォルダのパスを記入。
+
+> ログイン方法は API キーではなく **Claude アカウント（サブスク）** を選んでください。
+> 環境変数 `ANTHROPIC_API_KEY` が PC に設定されていても、このスクリプトは Claude Code に渡さないので、API 課金にはなりません。
 
 手動で1回実行して確認:
 
@@ -96,6 +105,8 @@ powershell -ExecutionPolicy Bypass -File .\install-windows-task.ps1
 ```cron
 0 8,11,14,18,22 * * * cd /path/to/link-vault/processor && /usr/local/bin/node process.mjs
 ```
+
+cron からは `claude` コマンドが見つからないことがあるので、`.env` に `LV_CLAUDE_BIN=/Users/<あなた>/.local/bin/claude` のようにフルパスを書いておいてください（場所は `which claude` で確認）。Windows でタスク実行時に見つからない場合も同様です（`where claude`）。
 
 ログは `processor/logs/` に残ります。
 
@@ -140,16 +151,21 @@ powershell -ExecutionPolicy Bypass -File .\install-windows-task.ps1
 X のページはログインなしで本文が読めないため、公開 API の [FxTwitter](https://github.com/FxEmbed/FxEmbed) 経由で本文を取得しています。
 取得できなかったときは URL とメモだけで分類し、要約に「推測」と書かれます。
 
-## 費用の目安
+## 費用
 
-1リンクあたり（本文〜数千字の場合）:
+**追加料金なし**（Claude の Pro / Max プランの範囲内）。GitHub もアプリも無料です。
 
-| モデル (`LV_MODEL`) | 目安 |
-|---|---|
-| `claude-opus-5-5`（既定・最高精度） | 約 $0.02〜0.05 |
-| `claude-haiku-5-5`（分類には十分） | 約 $0.001 |
+- 分析は 1 回の実行で最大 8 件ずつまとめて Claude Code に渡すので、プランの利用枠の消費は少なめです
+- 枠をもっと節約したいときは `.env` で `LV_MODEL=haiku`（カテゴリ分けなら十分）。精度重視なら `opus`（既定）
+- プランの上限に達して分析が失敗しても、リンクは消えません。失敗分は次の実行で自動的に再挑戦します（3回失敗したら、その後は1日1回ずっと再挑戦）
 
-月に300リンクなら Opus で $6〜15 程度、Haiku なら 50円程度です。コストを抑えたいときは `.env` で `LV_MODEL=claude-haiku-5-5` にしてください。
+<details>
+<summary>Claude API（従量課金）で動かす場合</summary>
+
+PC で Claude Code を使わない場合は、`.env` に `LV_BACKEND=api` と `ANTHROPIC_API_KEY` を設定すると Claude API で分析します。
+目安は 1 リンクあたり Opus で約 $0.02〜0.05、Haiku（`LV_MODEL=claude-haiku-5-5`）で約 $0.001 です。
+
+</details>
 
 ## データの形式
 
@@ -173,7 +189,7 @@ link-vault-data/
 
 ```bash
 cd link-vault/processor
-npm test              # 単体テスト + E2E（偽の Claude API・偽の Web ページで process.mjs を実行）
+npm test              # 単体テスト + E2E（偽の claude コマンド・偽の Claude API・偽の Web ページで process.mjs を実行）
 npm run rebuild       # AI を呼ばずに index.json / knowledge だけ再生成
 node process.mjs --no-git --data /path/to/data   # git 操作なし
 ```
