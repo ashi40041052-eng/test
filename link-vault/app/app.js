@@ -3,7 +3,7 @@
   'use strict';
   const LV = self.LV;
   const $ = (s) => document.querySelector(s);
-  const state = { mode: 'timeline', category: null, query: '', index: null, local: [] };
+  const state = { mode: 'timeline', category: null, query: '', index: null, local: [], events: new Map() };
 
   // ---------- helpers ----------
 
@@ -27,9 +27,17 @@
   }
 
   let toastTimer;
-  function toast(msg, ms) {
+  function toast(msg, ms, action) {
     const t = $('#toast');
     t.textContent = msg;
+    if (action) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'toast-action';
+      b.textContent = action.label;
+      b.addEventListener('click', () => { t.hidden = true; action.run(); });
+      t.appendChild(b);
+    }
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, ms || 2600);
@@ -101,7 +109,8 @@
 
   function updateBadge() {
     const b = $('#syncBadge');
-    const pending = state.local.filter((i) => !i.synced_at);
+    const pending = state.local.filter((i) => !i.synced_at)
+      .concat([...state.events.values()].filter((e) => !e.synced_at));
     const err = pending.find((i) => i.sync_error);
     b.hidden = false;
     b.className = 'badge' + (err ? ' err' : pending.length ? '' : ' ok');
@@ -112,7 +121,9 @@
 
   async function refreshLocal() {
     state.local = (await LV.getAllItems()).sort((a, b) => b.id.localeCompare(a.id));
+    state.events = await LV.latestEvents();
     updateBadge();
+    renderTrash();
     renderRecent();
     if (!$('#view-list').hidden) renderList();
     renderStorageInfo();
@@ -134,7 +145,14 @@
     return '<span class="chip">☁ 送信済み・分析待ち</span>';
   }
 
-  function itemHtml(it, local) {
+  // A local delete/restore event wins over what the (older) index says.
+  function isDeleted(id, indexItem) {
+    const ev = state.events.get(id);
+    if (ev) return ev.action === 'delete';
+    return !!(indexItem && indexItem.deleted);
+  }
+
+  function itemHtml(it, local, inTrash) {
     const analyzed = it.status === 'analyzed';
     const title = analyzed && it.title ? it.title : (it.url ? shortUrl(it.url) : 'メモ');
     const head = it.url
@@ -149,17 +167,26 @@
     const cat = analyzed && it.category ? '<button type="button" class="chip cat" data-cat="' + esc(it.category) + '">' + esc(it.category) + '</button>' : '';
     const tags = analyzed && it.tags ? it.tags.map((t) => '<span class="chip">#' + esc(t) + '</span>').join('') : '';
     return '<li class="item">' + head + summary + points + note +
-      '<div class="foot">' + cat + tags + '<span>' + esc(fmtDate(it.created_at)) + '</span>' + statusChip(local, it) + '</div></li>';
+      '<div class="foot">' + cat + tags + '<span>' + esc(fmtDate(it.created_at)) + '</span>' + (inTrash ? '' : statusChip(local, it)) +
+      (inTrash
+        ? '<button type="button" class="act" data-restore="' + esc(it.id) + '">↩ 戻す</button>'
+        : '<button type="button" class="act" data-del="' + esc(it.id) + '" aria-label="削除">🗑</button>') +
+      '</div></li>';
   }
 
   function renderRecent() {
     const m = analyzedMap();
-    const html = state.local.slice(0, 20).map((l) => itemHtml(Object.assign({}, l, m.get(l.id) || {}), l)).join('');
+    const html = state.local.filter((l) => !isDeleted(l.id, m.get(l.id))).slice(0, 20)
+      .map((l) => itemHtml(Object.assign({}, l, m.get(l.id) || {}), l)).join('');
     $('#recent').innerHTML = html || '<li class="meta">まだ何も保存されていません</li>';
   }
 
   // Index items + local items the index doesn't know about yet (unsent / not analyzed).
   function allItems() {
+    return allRows().filter(({ it }) => !isDeleted(it.id, it));
+  }
+
+  function allRows() {
     const index = state.index;
     const known = new Set(index ? index.known_ids || index.items.map((i) => i.id) : []);
     const localById = new Map(state.local.map((l) => [l.id, l]));
@@ -223,19 +250,39 @@
     ).join('');
   }
 
+  function renderTrash() {
+    const rows = allRows().filter(({ it }) => isDeleted(it.id, it));
+    $('#trashMeta').textContent = rows.length ? rows.length + '件。「戻す」で一覧に復活します。' : 'ゴミ箱は空です';
+    $('#trash').innerHTML = rows.map(({ it, local }) => itemHtml(it, local, true)).join('');
+  }
+
+  async function setDeleted(id, deleted) {
+    await LV.setDeleted(id, deleted);
+    await refreshLocal();
+    if (!$('#view-list').hidden) renderList();
+    requestSync();
+  }
+
+  async function deleteItem(id) {
+    if (!confirm('このリンクを削除しますか？\n（設定タブのゴミ箱から戻せます）')) return;
+    await setDeleted(id, true);
+    toast('削除しました', 6000, { label: '元に戻す', run: () => setDeleted(id, false).then(() => toast('元に戻しました')) });
+  }
+
   async function loadIndex(network) {
     state.index = (await LV.cachedIndex()) || null;
     renderList();
     renderRecent();
+    renderTrash();
     if (!network) return;
     try {
       const fresh = await LV.fetchIndex();
-      if (fresh) { state.index = fresh; renderList(); renderRecent(); }
+      if (fresh) { state.index = fresh; renderList(); renderRecent(); renderTrash(); }
     } catch (e) { /* offline or not configured: cached copy is shown */ }
   }
 
   async function renderStorageInfo() {
-    const total = state.local.length;
+    const total = state.local.filter((l) => !isDeleted(l.id)).length;
     const pending = state.local.filter((i) => !i.synced_at).length;
     let persisted = '不明';
     try { if (navigator.storage && navigator.storage.persisted) persisted = (await navigator.storage.persisted()) ? '有効' : '無効（ホーム画面に追加すると有効になりやすい）'; } catch (e) {}
@@ -290,6 +337,10 @@
       renderList();
     }));
     document.addEventListener('click', (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) { deleteItem(del.dataset.del); return; }
+      const res = e.target.closest('[data-restore]');
+      if (res) { setDeleted(res.dataset.restore, false).then(() => toast('一覧に戻しました')); return; }
       const chip = e.target.closest('[data-cat]');
       if (!chip) return;
       state.mode = 'timeline';

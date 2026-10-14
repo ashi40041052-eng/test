@@ -117,3 +117,57 @@ test('claude-code backend: batches links through the CLI without an API key', as
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('delete events: deleted links are not analyzed, re-saving a deleted URL works, restore brings it back', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lv-e2e-del-'));
+  const logFile = path.join(dir, 'fake-claude.log');
+  const write = async (rel, obj) => {
+    const f = path.join(dir, rel);
+    await fs.mkdir(path.dirname(f), { recursive: true });
+    await fs.writeFile(f, JSON.stringify(obj));
+  };
+  const A = '20261014-010000-aaaa0001', A2 = '20261014-020000-aaaa0002', B = '20261014-030000-bbbb0001';
+  await write(`links/2026/10/${A}.json`, { id: A, url: 'https://x.com/u/status/1?s=20', note: 'first', created_at: '2026-10-14T10:00:00+09:00' });
+  await write(`links/2026/10/${A2}.json`, { id: A2, url: 'https://twitter.com/u/status/1', note: 'again', created_at: '2026-10-14T11:00:00+09:00' });
+  await write(`links/2026/10/${B}.json`, { id: B, url: null, note: 'mistake', created_at: '2026-10-14T12:00:00+09:00' });
+  await write('events/2026/10/20261014-030100-ev000001.json', { id: '20261014-030100-ev000001', target: B, action: 'delete', at: '2026-10-14T03:01:00.000Z' });
+  const env = { ...process.env, LV_BACKEND: 'claude-code', LV_CLAUDE_BIN: path.join(HERE, 'fake-claude.mjs'), FAKE_CLAUDE_LOG: logFile, LV_DATA_DIR: dir };
+  const proc = () => run(process.execPath, [path.join(HERE, '..', 'process.mjs'), '--no-git'], { env });
+  const index = async () => JSON.parse(await fs.readFile(path.join(dir, 'index.json'), 'utf8'));
+  // X links can't be fetched in tests; give fetch a quick failure
+  env.HTTPS_PROXY = 'http://127.0.0.1:9';
+  try {
+    await proc();
+    let calls = (await fs.readFile(logFile, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].input.includes(A) && !calls[0].input.includes(B), 'deleted link B is not sent to AI; dup A2 not either');
+    assert.ok(!calls[0].input.includes(A2));
+    let idx = await index();
+    assert.equal(idx.items.find((i) => i.id === B).deleted, true);
+    assert.equal(idx.total, 1);
+    assert.ok(!(await fs.readFile(path.join(dir, 'knowledge', 'timeline.md'), 'utf8')).includes('mistake'));
+
+    // delete A: its duplicate A2 now stands alone, reusing A's analysis (no new AI call)
+    await write('events/2026/10/20261014-040000-ev000002.json', { id: '20261014-040000-ev000002', target: A, action: 'delete', at: '2026-10-14T04:00:00.000Z' });
+    await proc();
+    calls = (await fs.readFile(logFile, 'utf8')).trim().split('\n');
+    assert.equal(calls.length, 1, 'no new AI call');
+    idx = await index();
+    const a2 = idx.items.find((i) => i.id === A2);
+    assert.equal(a2.status, 'analyzed');
+    assert.ok(!a2.deleted);
+    assert.equal(idx.items.find((i) => i.id === A).deleted, true);
+
+    // restore B: it is analyzed now
+    await write('events/2026/10/20261014-050000-ev000003.json', { id: '20261014-050000-ev000003', target: B, action: 'restore', at: '2026-10-14T05:00:00.000Z' });
+    await proc();
+    idx = await index();
+    const b = idx.items.find((i) => i.id === B);
+    assert.ok(!b.deleted);
+    assert.equal(b.status, 'analyzed');
+    // raw files untouched
+    assert.equal(JSON.parse(await fs.readFile(path.join(dir, 'links/2026/10', `${B}.json`), 'utf8')).note, 'mistake');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

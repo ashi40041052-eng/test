@@ -49,3 +49,21 @@ test('buildOutputs merges duplicates and keeps unanalyzed links', () => {
   assert.ok(files['knowledge/categories/AI.md'].includes('[A](https://a.example/1)'));
   assert.ok(files['knowledge/timeline.md'].includes('（未分析）'));
 });
+
+test('buildOutputs flags deleted links and keeps them out of knowledge', () => {
+  const records = [
+    { id: '20261001-000000-aaaa', url: 'https://a.example/', created_at: '2026-10-01T09:00:00+09:00' },
+    { id: '20261002-000000-bbbb', url: 'https://b.example/', created_at: '2026-10-02T09:00:00+09:00' },
+  ];
+  const analyses = new Map(records.map((r, i) => [r.id, { id: r.id, status: 'analyzed', title: `T${i}`, summary: 's', category: 'C', tags: [] }]));
+  const { files, stats } = buildOutputs({ records, analyses, categories: [{ name: 'C' }], deleted: new Set(['20261002-000000-bbbb']) });
+  const index = JSON.parse(files['index.json']);
+  assert.equal(index.items.length, 2, 'deleted item stays in index for the trash view');
+  assert.equal(index.items.find((i) => i.id === '20261002-000000-bbbb').deleted, true);
+  assert.equal(index.total, 1);
+  assert.equal(index.categories[0].count, 1);
+  assert.equal(stats.deleted, 1);
+  assert.ok(!files['knowledge/timeline.md'].includes('T1'));
+  assert.ok(!files['knowledge/links.jsonl'].includes('bbbb'));
+  assert.ok(files['knowledge/timeline.md'].includes('T0'));
+});

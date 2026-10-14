@@ -139,3 +139,14 @@ details.cat-group > summary .desc { display: block; color: var(--muted); font-we
 }
 .tabs button { flex: 1; border: none; border-radius: 0; background: transparent; min-height: 56px; color: var(--muted); }
 .tabs button.on { color: var(--accent); font-weight: 700; }
+
+.item .act {
+  margin-left: auto; min-height: 36px; padding: 4px 10px; font-size: 14px;
+  background: transparent; border-color: var(--line); color: var(--muted);
+}
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast[hidden] { display: none; }
+.toast-action {
+  margin-left: auto; min-height: 36px; padding: 4px 12px; flex-shrink: 0;
+  background: transparent; color: inherit; border-color: currentColor; font-weight: 600;
+}

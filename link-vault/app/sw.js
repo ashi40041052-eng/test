@@ -1,7 +1,7 @@
 /* Link Vault service worker: offline app shell + background sync. */
 importScripts('./core.js');
 
-const CACHE = 'lv-shell-v1';
+const CACHE = 'lv-shell-v2';
 const SHELL = ['./', './index.html', './style.css', './core.js', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
