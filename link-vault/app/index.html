@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Link Vault</title>
+  <meta name="theme-color" content="#1f6f5c" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="LinkVault" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>Link Vault</h1>
+    <button id="syncBadge" class="badge" type="button" hidden></button>
+  </header>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <main>
+    <!-- 追加 -->
+    <section id="view-add" class="view">
+      <button id="pasteBtn" class="primary big" type="button">📋 コピーしたリンクを保存</button>
+      <p class="hint">リンクをコピーしてからタップ。下の欄に貼り付けても自動で保存されます。</p>
+
+      <form id="addForm" class="card">
+        <textarea id="input" rows="3" placeholder="ここに貼り付け（URLなら即保存）&#10;メモ付きで保存したい場合は書いてから「保存」"></textarea>
+        <div class="row">
+          <button type="submit" class="primary">保存</button>
+        </div>
+      </form>
+
+      <h2 class="sub">最近保存したもの</h2>
+      <ul id="recent" class="list"></ul>
+    </section>
+
+    <!-- 一覧 -->
+    <section id="view-list" class="view" hidden>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="検索（タイトル・要約・タグ・URL）" />
+        <div class="seg" role="tablist">
+          <button type="button" data-mode="timeline" class="on">時系列</button>
+          <button type="button" data-mode="category">カテゴリ</button>
+        </div>
+      </div>
+      <div id="catChips" class="chips"></div>
+      <p id="listMeta" class="meta"></p>
+      <div id="listBody"></div>
+    </section>
+
+    <!-- 設定 -->
+    <section id="view-settings" class="view" hidden>
+      <form id="settingsForm" class="card stack">
+        <h2 class="sub">保存先（GitHub リポジトリ）</h2>
+        <label>オーナー名<input name="owner" autocomplete="off" autocapitalize="off" placeholder="例: ashi40041052-eng" /></label>
+        <label>リポジトリ名<input name="repo" autocomplete="off" autocapitalize="off" placeholder="例: link-vault-data" /></label>
+        <label>ブランチ<input name="branch" autocomplete="off" autocapitalize="off" placeholder="main" /></label>
+        <label>アクセストークン<input name="token" type="password" autocomplete="off" placeholder="github_pat_..." /></label>
+        <div class="row">
+          <button type="submit" class="primary">保存して接続テスト</button>
+        </div>
+        <p id="settingsMsg" class="meta"></p>
+      </form>
+
+      <div class="card stack">
+        <h2 class="sub">データ</h2>
+        <p id="storageInfo" class="meta"></p>
+        <div class="row wrap">
+          <button id="syncNow" type="button">今すぐ送信</button>
+          <button id="exportBtn" type="button">端末のデータを書き出し（JSON）</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button type="button" data-view="add" class="on">＋ 追加</button>
+    <button type="button" data-view="list">一覧</button>
+    <button type="button" data-view="settings">設定</button>
+  </nav>
+
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

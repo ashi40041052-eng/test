@@ -1,0 +1,16 @@
+{
+  "name": "link-vault-processor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Analyzes and categorizes saved links with Claude, then regenerates the dashboard index and AI-readable markdown.",
+  "engines": { "node": ">=20.12" },
+  "scripts": {
+    "process": "node process.mjs",
+    "rebuild": "node process.mjs --no-ai",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0"
+  }
+}
