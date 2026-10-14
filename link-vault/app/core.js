@@ -9,12 +9,14 @@
  *  - Local items are never deleted. Sync only sets synced_at.
  *  - Remote writes are create-only files with a unique id, so retries are idempotent
  *    and can never overwrite another link.
+ *  - Deleting is a soft delete: a "delete" event is recorded (and synced) and the link is
+ *    hidden everywhere. A later "restore" event brings it back. Nothing is erased.
  */
 (function (g) {
   'use strict';
 
   const DB_NAME = 'link-vault';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const LS_BACKUP_KEY = 'lv-backup-v1';
   const URL_RE = /https?:\/\/[^\s<>"'「」『』（）()【】]+/g;
 
@@ -27,6 +29,7 @@
         const db = req.result;
         if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        if (!db.objectStoreNames.contains('events')) db.createObjectStore('events', { keyPath: 'id' });
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -56,6 +59,8 @@
   const putItem = (item) => run('items', 'readwrite', (s) => s.put(item));
   const getItem = (id) => run('items', 'readonly', (s) => s.get(id));
   const getAllItems = () => run('items', 'readonly', (s) => s.getAll()).then((a) => a || []);
+  const putEvent = (ev) => run('events', 'readwrite', (s) => s.put(ev));
+  const getAllEvents = () => run('events', 'readonly', (s) => s.getAll()).then((a) => a || []);
   const kvGet = (key) => run('kv', 'readonly', (s) => s.get(key));
   const kvSet = (key, value) => run('kv', 'readwrite', (s) => s.put(value, key));
 
@@ -155,6 +160,23 @@
     return saved;
   }
 
+  // ---------- delete / restore (soft) ----------
+
+  async function setDeleted(targetId, deleted) {
+    const now = new Date();
+    const ev = { id: newId(now), target: targetId, action: deleted ? 'delete' : 'restore', at: now.toISOString(), synced_at: null, sync_error: null };
+    await putEvent(ev);
+    return ev;
+  }
+
+  // Map<targetId, latest local event>
+  async function latestEvents() {
+    const m = new Map();
+    const evs = (await getAllEvents()).sort((a, b) => (a.at + a.id).localeCompare(b.at + b.id));
+    for (const e of evs) m.set(e.target, e);
+    return m;
+  }
+
   // ---------- config ----------
 
   async function getConfig() {
@@ -198,12 +220,24 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  // Returns 'ok' | 'retry' | 'fatal:<message>'
-  async function pushItem(cfg, item) {
-    const path = remotePath(item);
+  function eventPath(ev) {
+    return 'events/' + ev.id.slice(0, 4) + '/' + ev.id.slice(4, 6) + '/' + ev.id + '.json';
+  }
+
+  function pushItem(cfg, item) {
     const record = { id: item.id, url: item.url, note: item.note, text: item.text, created_at: item.created_at, via: item.via, client: 'link-vault-pwa' };
+    return pushFile(cfg, remotePath(item), record, 'add link ' + item.id);
+  }
+
+  function pushEvent(cfg, ev) {
+    const record = { id: ev.id, target: ev.target, action: ev.action, at: ev.at, client: 'link-vault-pwa' };
+    return pushFile(cfg, eventPath(ev), record, ev.action + ' link ' + ev.target);
+  }
+
+  // Creates one file. Returns 'ok' | 'retry' | 'fatal:<message>'
+  async function pushFile(cfg, path, record, message) {
     const body = JSON.stringify({
-      message: 'add link ' + item.id,
+      message: message,
       content: b64utf8(JSON.stringify(record, null, 2) + '\n'),
       branch: cfg.branch,
     });
@@ -235,22 +269,25 @@
     const work = async () => {
       const cfg = await getConfig();
       const pending = (await getAllItems()).filter((i) => !i.synced_at).sort((a, b) => a.id.localeCompare(b.id));
-      const res = { pushed: 0, pending: pending.length, failed: 0, error: null, configured: isConfigured(cfg) };
-      if (!pending.length || !res.configured) return res;
-      for (const item of pending) {
-        const out = await pushItem(cfg, item);
+      const events = (await getAllEvents()).filter((e) => !e.synced_at).sort((a, b) => a.id.localeCompare(b.id));
+      const res = { pushed: 0, pending: pending.length + events.length, failed: 0, error: null, configured: isConfigured(cfg) };
+      if (!res.pending || !res.configured) return res;
+      // Links first, then delete/restore events (oldest first, so the latest action wins).
+      const queue = pending.map((x) => ({ x, push: pushItem, save: putItem }))
+        .concat(events.map((x) => ({ x, push: pushEvent, save: putEvent })));
+      for (const { x, push, save } of queue) {
+        const out = await push(cfg, x);
         if (out === 'ok') {
-          item.synced_at = isoLocal(new Date());
-          item.sync_error = null;
-          item.remote_path = remotePath(item);
-          await putItem(item);
+          x.synced_at = isoLocal(new Date());
+          x.sync_error = null;
+          await save(x);
           res.pushed++;
         } else {
           res.failed++;
           if (out.startsWith('fatal:')) {
             res.error = out.slice(6);
-            item.sync_error = res.error;
-            await putItem(item);
+            x.sync_error = res.error;
+            await save(x);
           }
           break; // keep order; try again later
         }
@@ -289,6 +326,7 @@
 
   g.LV = {
     saveInput, buildItems, extractUrls, getAllItems, putItem, reconcileBackup,
+    setDeleted, latestEvents, getAllEvents,
     getConfig, setConfig, isConfigured, syncAll, fetchIndex, cachedIndex, testConnection,
     remotePath, isoLocal,
   };
