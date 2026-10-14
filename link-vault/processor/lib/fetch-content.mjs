@@ -53,11 +53,14 @@ function decodeEntities(s) {
   });
 }
 
+// Attribute value in either quote style; an apostrophe inside "..." is part of the value.
+const VALUE = `(?:"([^"]*)"|'([^']*)')`;
+
 function meta(html, key) {
-  const re1 = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]*content=["']([^"']*)["']`, 'i');
-  const re2 = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*(?:property|name)=["']${key}["']`, 'i');
+  const re1 = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]*?content=${VALUE}`, 'i');
+  const re2 = new RegExp(`<meta[^>]+?content=${VALUE}[^>]*(?:property|name)=["']${key}["']`, 'i');
   const m = html.match(re1) || html.match(re2);
-  return m ? decodeEntities(m[1]).trim() : null;
+  return m ? decodeEntities(m[1] ?? m[2]).trim() : null;
 }
 
 export function extractFromHtml(html) {
@@ -78,7 +81,7 @@ export function extractFromHtml(html) {
 }
 
 function charsetOf(contentType, headBytes) {
-  const m = (contentType || '').match(/charset=([\w-]+)/i);
+  const m = (contentType || '').match(/charset="?([\w-]+)/i);
   if (m) return m[1];
   const head = new TextDecoder('latin1').decode(headBytes.subarray(0, 4096));
   const m2 = head.match(/<meta[^>]+charset=["']?([\w-]+)/i);

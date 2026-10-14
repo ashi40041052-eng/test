@@ -1,7 +1,7 @@
 // Backend "claude-code": runs the Claude Code CLI in headless mode (`claude -p`) logged in with
 // your Claude Pro/Max subscription. No API key and no per-use charge; it counts toward the
 // plan's usage limits. Several links are analyzed per call to keep usage low.
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import os from 'node:os';
 import { RESULT_PROPERTIES, RESULT_REQUIRED, INSTRUCTIONS, categoryList, linkBlock, cleanResult } from './prompt.mjs';
 
@@ -24,8 +24,22 @@ const SCHEMA = {
 
 const SYSTEM = 'You are a librarian that summarizes and categorizes saved links. Follow the instructions in the user message and answer only with the requested structured output.';
 
-// cmd.exe quoting for Windows, where `claude` is usually a .cmd shim that needs a shell.
+// cmd.exe quoting, only used when `claude` is a .cmd shim (npm install) that needs a shell.
 const winQuote = (s) => (s === '' ? '""' : /[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
+
+// On Windows prefer the native claude.exe (no shell, no quoting issues).
+function resolveWindowsBin(bin) {
+  if (/\.exe$/i.test(bin)) return { file: bin, shell: false };
+  try {
+    const found = execFileSync('where', [bin], { encoding: 'utf8', windowsHide: true }).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const exe = found.find((f) => /\.exe$/i.test(f));
+    if (exe) return { file: exe, shell: false };
+    // npm installs also list an extensionless sh script first, which cmd.exe can't run.
+    const cmd = found.find((f) => /\.(cmd|bat)$/i.test(f));
+    if (cmd) return { file: winQuote(cmd), shell: true };
+  } catch {}
+  return { file: bin, shell: true };
+}
 
 function runClaude(bin, args, input, timeoutMs) {
   return new Promise((resolve, reject) => {
@@ -33,13 +47,16 @@ function runClaude(bin, args, input, timeoutMs) {
     // An API key in the environment would make Claude Code bill the API instead of the subscription.
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
-    const win = process.platform === 'win32';
-    const child = spawn(bin,win ? args.map(winQuote) : args, {
+    const target = process.platform === 'win32' ? resolveWindowsBin(bin) : { file: bin, shell: false };
+    const child = spawn(target.file, target.shell ? args.map(winQuote) : args, {
       cwd: os.tmpdir(), // keep project CLAUDE.md files out of the prompt
       env,
-      shell: win,
+      shell: target.shell,
       windowsHide: true,
     });
+    // Decode as UTF-8 across chunk boundaries (Japanese text would otherwise get garbled).
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     let stdout = '', stderr = '';
     const timer = setTimeout(() => { child.kill(); reject(new Error(`claude timed out after ${timeoutMs / 1000}s`)); }, timeoutMs);
     child.stdout.on('data', (d) => { stdout += d; });

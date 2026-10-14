@@ -18,7 +18,8 @@
   const DB_NAME = 'link-vault';
   const DB_VERSION = 2;
   const LS_BACKUP_KEY = 'lv-backup-v1';
-  const URL_RE = /https?:\/\/[^\s<>"'「」『』（）()【】]+/g;
+  // Japanese punctuation and full-width brackets end a URL (text often follows with no space).
+  const URL_RE = /https?:\/\/[^\s<>"'「」『』（）【】。、！？　]+/g;
 
   let dbPromise = null;
   function openDB() {
@@ -125,9 +126,21 @@
       sign + pad(Math.floor(a / 60)) + ':' + pad(a % 60);
   }
 
+  // Strips trailing punctuation, and a trailing ")" that has no matching "(" in the URL,
+  // so "(see https://a.com)" works and "https://en.wikipedia.org/wiki/Mercury_(planet)" stays whole.
+  function cleanUrl(u) {
+    for (;;) {
+      const t = u.replace(/[.,、。!！?？:;]+$/, '');
+      const open = (t.match(/\(/g) || []).length, close = (t.match(/\)/g) || []).length;
+      const next = t.endsWith(')') && close > open ? t.slice(0, -1) : t;
+      if (next === u) return u;
+      u = next;
+    }
+  }
+
   function extractUrls(text) {
     const found = (text || '').match(URL_RE) || [];
-    return Array.from(new Set(found.map((u) => u.replace(/[.,、。!！?？]+$/, ''))));
+    return Array.from(new Set(found.map(cleanUrl)));
   }
 
   // Splits raw input into items: one per URL. Text without any URL is kept as a memo item.
@@ -135,7 +148,8 @@
     const text = (rawText || '').trim();
     const urls = extractUrls([sharedUrl || '', text].join(' '));
     let note = text;
-    urls.forEach((u) => { note = note.split(u).join(' '); });
+    // Longest first, so a URL that is a prefix of another doesn't leave "/x" behind.
+    urls.slice().sort((a, b) => b.length - a.length).forEach((u) => { note = note.split(u).join(' '); });
     note = note.replace(/\s+/g, ' ').trim();
     const now = new Date();
     const base = { text: text || null, note: note || null, created_at: isoLocal(now), via: via || 'manual', synced_at: null, sync_error: null };
@@ -256,6 +270,8 @@
       }
       if (r.status === 409 || r.status >= 500 || r.status === 429) { await sleep(1000 * (attempt + 1)); continue; }
       if (r.status === 401) return 'fatal:トークンが無効です (401)';
+      // Secondary rate limit: GitHub answers 403 with retry-after / remaining=0. Not a permission problem.
+      if (r.status === 403 && (r.headers.get('retry-after') || r.headers.get('x-ratelimit-remaining') === '0')) return 'retry';
       if (r.status === 403) return 'fatal:権限がありません (403)。トークンの Contents 書き込み権限を確認してください';
       if (r.status === 404) return 'fatal:リポジトリが見つかりません (404)。設定を確認してください';
       return 'fatal:GitHub エラー ' + r.status;

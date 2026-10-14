@@ -1,7 +1,8 @@
 /* Link Vault service worker: offline app shell + background sync. */
 importScripts('./core.js');
 
-const CACHE = 'lv-shell-v2';
+const CACHE = 'lv-shell-v3';
+const SHELL_MARKER = 'id="pasteBtn"'; // present only in this app's index.html
 const SHELL = ['./', './index.html', './style.css', './core.js', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -22,28 +23,28 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // GitHub API etc. always go to network
 
-  // Navigations (including share-target launches with ?url=...) get the cached shell,
-  // so a shared link can be saved even with no connection.
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put('./index.html', copy));
-        return res;
-      }).catch(() => caches.match('./index.html'))
-    );
-    return;
-  }
-
-  // Stale-while-revalidate for static files.
+  // Network first, so a new release is used as soon as the app is opened online; the cache
+  // is the offline fallback. Navigations (including share-target launches with ?url=...)
+  // fall back to the cached shell, so a shared link can be saved with no connection.
+  // Only successful responses are cached: an error page must never replace the shell.
+  const fallback = () => (req.mode === 'navigate'
+    ? caches.match('./index.html')
+    : caches.match(req, { ignoreSearch: true }));
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      const network = fetch(req).then((res) => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+    fetch(req).then(async (res) => {
+      if (!res.ok) return (await fallback()) || res;
+      if (req.mode === 'navigate') {
+        // Wi-Fi login pages answer 200 with their own HTML: only trust the real app shell.
+        const html = await res.clone().text();
+        if (!html.includes(SHELL_MARKER)) return (await fallback()) || res;
+        const c = await caches.open(CACHE);
+        await c.put('./index.html', new Response(html, { headers: res.headers }));
         return res;
-      }).catch(() => cached);
-      return cached || network;
-    })
+      }
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(req, copy));
+      return res;
+    }).catch(() => fallback())
   );
 });
 
