@@ -67,3 +67,9 @@ test('buildOutputs flags deleted links and keeps them out of knowledge', () => {
   assert.ok(!files['knowledge/links.jsonl'].includes('bbbb'));
   assert.ok(files['knowledge/timeline.md'].includes('T0'));
 });
+
+test('extractFromHtml keeps apostrophes inside double-quoted meta values', () => {
+  const r = extractFromHtml(`<meta property="og:title" content="Here's how we built it"><meta content='Say "hi"' name="description">`);
+  assert.equal(r.title, "Here's how we built it");
+  assert.equal(r.description, 'Say "hi"');
+});

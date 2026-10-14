@@ -46,17 +46,18 @@
   // ---------- saving ----------
 
   async function save(text, via, sharedUrl) {
+    let items;
     try {
-      const items = await LV.saveInput(text, via, sharedUrl);
+      items = await LV.saveInput(text, via, sharedUrl);
       if (!items.length) { toast('保存する内容がありません'); return false; }
-      toast(items.length > 1 ? items.length + '件を端末に保存しました ✓' : '端末に保存しました ✓');
-      await refreshLocal();
-      requestSync();
-      return true;
     } catch (e) {
       alert(e.message || String(e));
       return false;
     }
+    toast(items.length > 1 ? items.length + '件を端末に保存しました ✓' : '端末に保存しました ✓');
+    try { await refreshLocal(); } catch (e) { console.warn('refresh failed', e); }
+    requestSync();
+    return true;
   }
 
   async function pasteFromClipboard() {
@@ -104,7 +105,7 @@
     } catch (e) {
       if (manual) toast('送信エラー: ' + e.message, 4000);
     }
-    await refreshLocal();
+    try { await refreshLocal(); } catch (e) { console.warn('refresh failed', e); }
   }
 
   function updateBadge() {
@@ -145,10 +146,12 @@
     return '<span class="chip">☁ 送信済み・分析待ち</span>';
   }
 
-  // A local delete/restore event wins over what the (older) index says.
+  // This device's latest delete/restore wins while it is unsent or newer than what the index
+  // knows; otherwise the index (which also reflects other devices) wins.
   function isDeleted(id, indexItem) {
     const ev = state.events.get(id);
-    if (ev) return ev.action === 'delete';
+    const indexAt = indexItem && indexItem.event_at;
+    if (ev && (!ev.synced_at || !indexAt || ev.at >= indexAt)) return ev.action === 'delete';
     return !!(indexItem && indexItem.deleted);
   }
 
@@ -388,19 +391,26 @@
 
   async function init() {
     bind();
+    // A shared link is saved first, before anything else that could fail.
+    try { await handleShareLaunch(); } catch (e) { console.error(e); }
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
     try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
     try {
       const restored = await LV.reconcileBackup();
       if (restored) toast('バックアップから ' + restored + '件を復元しました');
     } catch (e) { console.warn(e); }
-    await refreshLocal();
-    await handleShareLaunch();
-    await loadIndex(false);
-    const cfg = await LV.getConfig();
+    try {
+      await refreshLocal();
+      await loadIndex(false);
+    } catch (e) {
+      console.error(e);
+      toast('端末の保存領域を開けませんでした。保存は控え（予備）に行われます', 6000);
+    }
+    let cfg = {};
+    try { cfg = await LV.getConfig(); } catch (e) {}
     if (!LV.isConfigured(cfg)) toast('はじめに「設定」で保存先を登録してください（未設定でも端末には保存されます）', 5000);
     requestSync();
-    loadIndex(true);
+    loadIndex(true).catch(() => {});
   }
 
   init();

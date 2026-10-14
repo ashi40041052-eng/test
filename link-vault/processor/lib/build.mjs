@@ -4,7 +4,7 @@ import { safeFileName } from './util.mjs';
 // Pure function: returns { files: {relativePath: content} }.
 // Deleted links stay in index.json (flagged, so the app can show them in the trash) but are
 // left out of counts and of everything under knowledge/.
-export function buildOutputs({ records, analyses, categories, deleted = new Set(), now = new Date() }) {
+export function buildOutputs({ records, analyses, categories, deleted = new Set(), latestEvents = new Map(), now = new Date() }) {
   const byId = new Map(records.map((r) => [r.id, r]));
   const items = [];
   const extras = new Map(); // original id -> duplicate records
@@ -31,6 +31,8 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
     };
     if (dups.length) item.also_saved_at = dups.map((d) => d.created_at);
     if (deleted.has(r.id)) item.deleted = true;
+    // Lets the app tell whether its own (possibly older) delete/restore is still current.
+    if (latestEvents.has(r.id)) item.event_at = latestEvents.get(r.id).at;
     if (a?.status === 'analyzed') {
       Object.assign(item, {
         title: a.title,
@@ -70,6 +72,11 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
   files['knowledge/links.jsonl'] = visible.map((i) => JSON.stringify(i)).join('\n') + (visible.length ? '\n' : '');
 
   const used = cats.filter((c) => c.count > 0);
+  // Content-derived (not the run time), so a run with nothing new changes no files.
+  const lastChange = items.reduce((m, i) => {
+    for (const t of [i.created_at, i.analyzed_at]) if (t && (!m || new Date(t) > new Date(m))) m = t;
+    return m;
+  }, null);
   const pendingCount = visible.filter((i) => i.status !== 'analyzed').length;
   files['knowledge/README.md'] = [
     '# Link Vault ナレッジベース',
@@ -77,7 +84,7 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
     'ユーザーがSNS等で「良い」と思って保存したリンク集です。各リンクはAIが本文を読んで要約・カテゴリ分けしています。',
     'AIへ: このディレクトリはユーザーの関心・アイデアの情報源です。質問に関連するカテゴリのファイルを読んでください。',
     '',
-    `- 最終更新: ${generated_at}`,
+    `- 最終更新: ${lastChange || '-'}`,
     `- 総件数: ${visible.length}（未分析 ${pendingCount}）`,
     '',
     '## ファイル構成',

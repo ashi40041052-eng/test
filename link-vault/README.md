@@ -63,51 +63,59 @@ GitHub → Settings → Developer settings → **Fine-grained personal access to
 
 アプリの「設定」タブで、オーナー名・リポジトリ名（`link-vault-data`）・トークンを入れて「保存して接続テスト」。
 
-### 4. PC 側（AI 分析）
+### 4. PC 側（AI 分析）— コマンド1つ
 
-必要なもの: [Node.js](https://nodejs.org/) 20.12 以上、git、[Claude Code](https://code.claude.com/)（Claude の Pro / Max プランでログイン）
+分析は PC の Claude Code にサブスク（Pro / Max）のまま任せるので、**API キーも追加料金も不要**です。
+下のコマンドを貼り付けて Enter を押すだけで、必要なものを順番に用意します：
 
-分析は PC の Claude Code にサブスクのまま任せるので、**API キーも追加料金も不要**です。
+1. git / Node.js / Claude Code の確認とインストール
+2. Claude Code のログイン確認（未ログインなら案内が出る）
+3. プログラムのダウンロード
+4. データ用リポジトリ（`link-vault-data`）のダウンロード
+5. 設定ファイル（`.env`）の作成
+6. 試しに 1 回実行
+7. 1 日 5 回（8・11・14・18・22 時）の自動実行を登録
 
-```bash
-# Claude Code をまだ入れていなければ（Windows は公式サイトのインストーラー手順に従う）
-curl -fsSL https://claude.ai/install.sh | bash
-claude          # 起動したら /login で「Claude アカウント（Pro/Max）」でログイン → /exit
-
-git clone https://github.com/<ユーザー名>/link-vault-data.git   # データリポジトリ
-cd <このリポジトリ>/link-vault/processor
-npm install
-cp .env.example .env    # Windows: copy .env.example .env
-```
-
-`.env` の `LV_DATA_DIR` に、上でクローンしたフォルダのパスを記入。
-
-> ログイン方法は API キーではなく **Claude アカウント（サブスク）** を選んでください。
-> 環境変数 `ANTHROPIC_API_KEY` が PC に設定されていても、このスクリプトは Claude Code に渡さないので、API 課金にはなりません。
-
-手動で1回実行して確認:
-
-```bash
-npm run process
-```
-
-#### 1日5回の自動実行
-
-**Windows**（8:00 / 11:00 / 14:00 / 18:00 / 22:00。PCが切れていた時間の分は次に起動したときに実行）:
+**Windows**（スタートメニューで「PowerShell」を開いて貼り付け）:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\install-windows-task.ps1
+irm https://raw.githubusercontent.com/ashi40041052-eng/test/main/link-vault/processor/setup-windows.ps1 | iex
 ```
 
-時刻を変えたいとき: `.\install-windows-task.ps1 -Times "07:30","12:00","20:00"`
+- 途中で GitHub のログイン画面が開いたら、案内どおりにログインしてください
+- PC が切れていた時間の分は、次に起動したときに実行されます
 
-**Mac / Linux**（`crontab -e`）:
+**Mac**（「ターミナル」を開いて貼り付け。Linux でも動きます）:
 
-```cron
-0 8,11,14,18,22 * * * cd /path/to/link-vault/processor && /usr/local/bin/node process.mjs
+```bash
+curl -fsSL https://raw.githubusercontent.com/ashi40041052-eng/test/main/link-vault/processor/setup-mac.sh | bash
 ```
 
-cron からは `claude` コマンドが見つからないことがあるので、`.env` に `LV_CLAUDE_BIN=/Users/<あなた>/.local/bin/claude` のようにフルパスを書いておいてください（場所は `which claude` で確認）。Windows でタスク実行時に見つからない場合も同様です（`where claude`）。
+- GitHub の Username / Password を聞かれたら、Username は自分のユーザー名、Password には**スマホに入れたトークン（`github_pat_...`）**を貼り付け（入力しても画面には表示されません）
+- スリープ中だった分は、起きたときに実行されます
+
+どちらも、何度実行しても大丈夫です（終わっている手順は飛ばします）。
+
+> Claude Code のログインは、API キーではなく **Claude アカウント（サブスク）** を選んでください。
+> PC に `ANTHROPIC_API_KEY` が設定されていても、このスクリプトは Claude Code に渡さないので API 課金にはなりません。
+
+<details>
+<summary>手動でセットアップする場合</summary>
+
+```bash
+git clone https://github.com/<ユーザー名>/test.git link-vault-app
+git clone https://github.com/<ユーザー名>/link-vault-data.git
+cd link-vault-app/link-vault/processor
+npm ci
+cp .env.example .env    # LV_DATA_DIR にデータリポジトリのパスを書く
+npm run process         # 1回実行
+```
+
+自動実行: Windows は `powershell -ExecutionPolicy Bypass -File .\install-windows-task.ps1`、
+Mac / Linux は cron に `0 8,11,14,18,22 * * * cd /path/to/processor && node process.mjs`。
+`claude` が見つからないと言われたら `.env` の `LV_CLAUDE_BIN` にフルパス（`which claude` / `where claude`）を書いてください。
+
+</details>
 
 ログは `processor/logs/` に残ります。
 

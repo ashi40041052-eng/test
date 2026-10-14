@@ -1,0 +1,28 @@
+name: link-vault
+
+on:
+  push:
+    branches: [main]
+    paths: ['link-vault/**', '.github/workflows/link-vault.yml']
+  pull_request:
+    paths: ['link-vault/**', '.github/workflows/link-vault.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: link-vault/processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: link-vault/processor/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: Syntax-check app and setup scripts
+        run: |
+          for f in ../app/*.js; do node --check "$f"; done
+          bash -n setup-mac.sh
