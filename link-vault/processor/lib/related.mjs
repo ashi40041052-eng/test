@@ -21,6 +21,7 @@ import { X_STATUS, fxBase, fetchWithTimeout, fetchGeneric } from './fetch-conten
 import { archivePaths, shouldAttempt, nextAttempts, NotFoundError } from './archive.mjs';
 import { readJson } from './util.mjs';
 import { fetchProfileSites, xsearchTrigger, searchReplies } from './related-extra.mjs';
+import { captureXReplies, xrepliesTrigger, perRun as xrepliesPerRun } from './x-replies.mjs';
 
 export const LIMITS = {
   maxParents: 3,
@@ -238,6 +239,8 @@ export function scorePrimary(g) {
     // supplements (v3.1): the author's profile website only wins when nothing better exists; replies found by search rank like a parent link
     if (String(r.origin || '').startsWith('profile:')) { score += 1; why.push(`author profile website (${r.origin.slice(8)})`); }
     if (r.origin === 'x_search') { score += 2; why.push("found in other people's replies (x search)"); }
+    if (r.origin === 'x_replies') { score += 2; why.push("found in other people's replies (browser)"); }
+    if (r.origin === 'x_replies_self') { score += 3; why.push("found in the author's own reply (browser)"); }
     return { ...r, score, order, why: why.join('; ') };
   });
   scored.sort((a, b) => b.score - a.score || (TYPE_RANK[a.type] ?? 9) - (TYPE_RANK[b.type] ?? 9) || a.order - b.order);
@@ -441,7 +444,7 @@ async function walkParents(json, rootId, log) {
 
 // ---------- orchestrator ----------
 
-export const newRelatedBudget = () => ({ resources: LIMITS.runResourceBudget, arxiv: LIMITS.runArxivBudget, searches: Number(process.env.LV_XSEARCH_PER_RUN ?? 3) });
+export const newRelatedBudget = () => ({ resources: LIMITS.runResourceBudget, arxiv: LIMITS.runArxivBudget, searches: Number(process.env.LV_XSEARCH_PER_RUN ?? 3), xreplies: xrepliesPerRun() });
 
 async function fetchAll(p, resources, budget, log) {
   const started = Date.now();
@@ -485,7 +488,7 @@ function newFromExtras(have, extras) {
  * posts: ledger-style posts; resources: ledger/graph resources; supp: {profile_done, xsearch_done} (mutated).
  * Returns the extra {url, origin} candidates. Never throws.
  */
-async function gatherExtras({ p, record, posts, resources, supp, budget, now, log }) {
+async function gatherExtras({ p, record, posts, resources, supp, budget, now, log, primary }) {
   const extras = [];
   try {
     if (!supp.profile_done) {
@@ -511,6 +514,16 @@ async function gatherExtras({ p, record, posts, resources, supp, budget, now, lo
       }
     }
   } catch (e) { log(`x search failed: ${e.message}`); }
+  try {
+    if (!supp.xreplies_done) {
+      const trig = xrepliesTrigger(posts, [...resources, ...extras], { primary, savedAt: record.created_at, now });
+      const self = posts.find((x) => x.role === 'self');
+      if (trig && self?.sid) {
+        const r = await captureXReplies({ relatedRoot: p.root, id: record.id, statusUrl: record.url, sid: self.sid, budget, now, log });
+        if (r.status === 'done') { supp.xreplies_done = true; supp.xreplies_trigger = trig; for (const u of r.urls) extras.push({ url: u.url, origin: u.own ? 'x_replies_self' : 'x_replies' }); }
+      }
+    }
+  } catch (e) { log(`x replies failed: ${e.message}`); }
   return extras;
 }
 
@@ -526,7 +539,7 @@ async function supplementExisting(p, record, budget, now, log) {
   if (!ledger?.posts) return false;
   const supp = { ...(ledger.supplement || {}) };
   const before = JSON.stringify(supp);
-  const extras = await gatherExtras({ p, record, posts: ledger.posts, resources: ledger.resources || [], supp, budget, now, log });
+  const extras = await gatherExtras({ p, record, posts: ledger.posts, resources: ledger.resources || [], supp, budget, now, log, primary: ledger.primary });
   let fresh = newFromExtras(ledger.resources || [], extras).slice(0, Math.max(0, LIMITS.maxResources - (ledger.resources || []).length));
   if (!fresh.length && JSON.stringify(supp) === before) return false;
   let n = Math.max(0, ...(ledger.resources || []).map((r) => r.n));
@@ -570,7 +583,7 @@ export async function captureRelated({ dir, record, budget = newRelatedBudget(),
     const { json, from } = await loadThread(p, rootId);
     let graph = graphFromThread(json, rootId, { extraParents: await walkParents(json, rootId, log) });
     const supp = {};
-    const extras = await gatherExtras({ p, record, posts: graph.posts, resources: graph.resources, supp, budget, now, log });
+    const extras = await gatherExtras({ p, record, posts: graph.posts, resources: graph.resources, supp, budget, now, log, primary: graph.primary });
     const more = newFromExtras(graph.resources, extras);
     if (more.length) {
       const sp = scorePrimary({ posts: graph.posts, resources: [...graph.resources.map(({ n, ...r }) => r), ...more], objects: graph.objects });

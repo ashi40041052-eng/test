@@ -110,7 +110,7 @@ export const newXsearchBudget = () => ({ searches: perRun() });
  */
 export function xsearchTrigger(posts, resources) {
   if (process.env.LV_XSEARCH_FORCE === '1') return 'forced';
-  const real = resources.filter((r) => !String(r.origin || '').startsWith('profile:') && r.origin !== 'x_search');
+  const real = resources.filter((r) => !String(r.origin || '').startsWith('profile:') && !['x_search', 'x_replies', 'x_replies_self'].includes(r.origin));
   const selfThread = new Set(posts.filter((p) => p.role === 'self' || p.role === 'self_reply').map((p) => p.sid));
   const inSelfThread = real.some((r) => (r.found_in || []).some((s) => selfThread.has(s)));
   const pointing = posts.filter((p) => p.role === 'self' || p.role === 'parent').some((p) => REPLY_HINT.test(p.text || ''));

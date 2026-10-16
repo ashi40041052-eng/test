@@ -84,6 +84,8 @@ else
 fi
 info "$APP_DIR"
 (cd "$PROC_DIR" && npm ci --silent --no-audit --no-fund)
+# X の返信は bsk(browser-skill)で、本人の Chrome(X ログイン済み)から読む。無ければ自動でスキップされる
+if command -v bsk >/dev/null 2>&1 && bsk status >/dev/null 2>&1; then info "bsk 利用可(他人のリプライを自動で読めます)"; else info "（bsk が未接続。他人のリプライの取得だけ自動でスキップされます）"; fi
 
 # ---------- 4. data repo ----------
 step "4/7 データ用リポジトリ（$DATA_REPO）を用意"
@@ -123,7 +125,7 @@ step "6/7 試しに1回実行"
 # ---------- 7. schedule ----------
 step "7/7 1日の自動実行を設定（${HOURS// /時・}時）"
 NODE_BIN="$(command -v node)"
-RUN_PATH="$(dirname "$NODE_BIN"):$(dirname "$CLAUDE_BIN"):/usr/bin:/bin:/usr/sbin:/sbin"
+RUN_PATH="$(dirname "$NODE_BIN"):$(dirname "$CLAUDE_BIN"):$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin" # ~/.local/bin: bsk(browser-skill)
 if [ "$OS" = "Darwin" ]; then
   LABEL="com.linkvault.processor"
   PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
