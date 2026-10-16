@@ -179,3 +179,38 @@ test('e2e: LV_XSEARCH=0 and a fake-less test double never call grok', async () =
     assert.equal((await t.rj(MIR, 'related.json')).resources.some((r) => r.origin === 'profile:@MireloAI'), true);
   } finally { await t.cleanup(); }
 });
+
+test('e2e: a v3 related.json gains supplement resources later -> --reanalyze-related redoes only that link', async () => {
+  const t = await setup(`cat '${F('fake-grok-ok.json')}'`);
+  const logFile = path.join(t.dir, 'fake-claude.log');
+  const ai = { LV_CLAUDE_BIN: path.join(HERE, 'fake-claude.mjs'), FAKE_CLAUDE_LOG: logFile, LV_BACKEND: 'claude-code', LV_XSEARCH: '0' };
+  const calls = async () => (await fs.readFile(logFile, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
+  try {
+    // MIR already has a v3-era related.json (no supplement) and an analysis with a primary_subject
+    const root = path.join(t.dir, 'archive/2026', MIR.id);
+    await fs.mkdir(path.join(root, 'related/posts'), { recursive: true });
+    await fs.writeFile(path.join(root, 'related.json'), JSON.stringify({
+      schema: 1, id: MIR.id, captured_at: '2026-10-16T01:00:00.000Z', captured_by: 'processor', thread_from: 'fx', root: '3000',
+      posts: [{ sid: '3000', role: 'self', author: '@studio_yebisu', text: 'SFX2.0 の動画が凄い', urls: [], published_at: '2026-10-16T01:00:00.000Z' },
+        { sid: '3001', role: 'quote', of: '3000', author: '@MireloAI', text: 'Introducing Mirelo SFX 2.0', urls: [] }],
+      resources: [], primary: { kind: 'post', sid: '3001', reason: 'x' },
+    }, null, 2));
+    for (const e of [MIR, FLX, NOTOOL]) {
+      await fs.mkdir(path.join(t.dir, 'analysis/2026'), { recursive: true });
+      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', analyzed_at: '2026-10-16T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [] }));
+    }
+    await t.proc({ LV_XSEARCH: '0' }); // archive-only: supplement appends the profile site
+    const m = await t.rj(MIR, 'related.json');
+    assert.ok(m.resources.some((r) => r.origin === 'profile:@MireloAI'));
+    assert.equal(m.posts.length, 2, 'existing entries untouched');
+    assert.ok(m.supplement.resources_added_at > '2026-10-16T02:00:00.000Z');
+    await run(process.execPath, [PROC, '--reanalyze-related', '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_GROK_BIN: path.join(t.dir, 'fake-grok.sh'), LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
+    const c = await calls();
+    assert.equal(c.length, 1);
+    assert.ok(c[0].includes(MIR.id) && !c[0].includes(NOTOOL.id), 'only the supplemented link is redone');
+    assert.match(c[0], /site\/mirelo/);
+    // and not again
+    await run(process.execPath, [PROC, '--reanalyze-related', '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_GROK_BIN: path.join(t.dir, 'fake-grok.sh'), LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
+    assert.equal((await calls()).length, 1);
+  } finally { await t.cleanup(); }
+});

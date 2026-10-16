@@ -246,9 +246,12 @@
     return a.join(' · ');
   }
   function resName(r, m) { return (m && (m.full_name || m.id || m.title)) || r.key || shortUrl(r.url); }
+  // v3.1 supplements carry an origin: the author's profile website or a link found in other people's replies (x search)
+  function originLabel(r) { return !r.origin ? '' : r.origin === 'x_search' ? 'リプ欄(検索)' : r.origin.indexOf('profile:') === 0 ? 'プロフィール ' + r.origin.slice(8) : r.origin; }
   function miniRes(r) {
     const pi = DL.pkInfo(r.pk);
-    return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer">' + (pi ? pi[0] + ' ' : '') + esc(r.key || shortUrl(r.url)) + '</a>';
+    const o = originLabel(r);
+    return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer"' + (o ? ' title="' + esc(o) + '"' : '') + '>' + (pi ? pi[0] + ' ' : '') + esc(r.key || shortUrl(r.url)) + (o ? ' <span class="muted">(' + esc(o) + ')</span>' : '') + '</a>';
   }
   function postHtml(p, nested) {
     const roleLabel = { parent: '親', self: '保存ポスト', self_reply: '本人の続き', quote: '引用' }[p.role] || p.role;

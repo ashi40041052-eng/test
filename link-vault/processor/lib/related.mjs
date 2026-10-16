@@ -497,7 +497,8 @@ async function gatherExtras({ p, record, posts, resources, supp, budget, now, lo
         if (r.status === 'error') failed = true;
         for (const url of r.urls) extras.push({ url, origin: `profile:${h}` });
       }
-      if (!failed) supp.profile_done = true;
+      // network trouble: retry next run, but give up after 5 tries so an unreachable profile does not cost 2 fetches every run forever
+      if (!failed || (supp.profile_attempts = (supp.profile_attempts || 0) + 1) >= 5) supp.profile_done = true;
     }
   } catch (e) { log(`profile fallback failed: ${e.message}`); }
   try {
@@ -530,6 +531,7 @@ async function supplementExisting(p, record, budget, now, log) {
   if (!fresh.length && JSON.stringify(supp) === before) return false;
   let n = Math.max(0, ...(ledger.resources || []).map((r) => r.n));
   fresh = fresh.map((r) => ({ ...r, n: ++n }));
+  if (fresh.length) supp.resources_added_at = now.toISOString(); // --reanalyze-related re-reads links changed after their analysis
   const fetched = fresh.length ? await fetchAll(p, fresh, budget, log) : new Map();
   const added = fresh.map((r) => ({
     n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, origin: r.origin,
