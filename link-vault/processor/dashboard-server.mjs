@@ -13,6 +13,7 @@ const envFile = path.join(HERE, '.env');
 if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 const APP_DIR = path.resolve(HERE, '../app');
 const DATA_DIR = path.resolve(process.env.LV_DATA_DIR || '');
+const LOG_DIR = path.resolve(process.env.LV_LOG_DIR || path.join(HERE, 'logs'));
 const PORT = Number(process.env.LV_DASH_PORT || 4848);
 if (!process.env.LV_DATA_DIR || !fs.existsSync(DATA_DIR)) { console.error('LV_DATA_DIR が見つかりません: ' + DATA_DIR); process.exit(1); }
 
@@ -32,7 +33,9 @@ http.createServer((req, res) => {
   try { rel = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400).end(); return; }
   if (rel === '/') { res.writeHead(302, { Location: '/dashboard.html' }).end(); return; }
   const isData = rel.startsWith('/data/');
-  const file = isData ? resolveUnder(DATA_DIR, rel.slice(6)) : resolveUnder(APP_DIR, rel.slice(1));
+  // the only log served: the x-replies status (no secrets; the dashboard header shows it)
+  const file = rel === '/logs/x-replies-status.json' ? path.join(LOG_DIR, 'x-replies-status.json')
+    : isData ? resolveUnder(DATA_DIR, rel.slice(6)) : resolveUnder(APP_DIR, rel.slice(1));
   if (!file || file.includes(path.sep + '.git')) { res.writeHead(403).end(); return; }
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end(); return; }

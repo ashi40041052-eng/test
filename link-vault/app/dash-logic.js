@@ -86,6 +86,25 @@
     return Math.max(0, Math.min(list.length - 1, i + delta));
   }
 
+  // The selected id if it is in the current view, else null (a hidden link must not keep its detail pane).
+  function keepSelection(view, selId) {
+    return selId && view.some((x) => x.id === selId) ? selId : null;
+  }
+
+  // Header text for logs/x-replies-status.json ({state: ok|skip|error, reason, at, last_ok_at}); '' when absent.
+  function xrStatusText(st) {
+    if (!st || !st.state) return '';
+    const d = (iso) => { const t = new Date(iso); return isNaN(t) ? '' : (t.getMonth() + 1) + '/' + t.getDate() + ' ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'); };
+    if (st.state === 'ok') return 'リプ取得: 正常 ' + d(st.at);
+    return 'リプ取得: ' + (st.state === 'error' ? 'エラー' : 'スキップ') + (st.reason ? ' (' + String(st.reason).slice(0, 40) + ')' : '') + (st.last_ok_at ? ' · 最終成功 ' + d(st.last_ok_at) : '');
+  }
+
+  // true when the rendered thread already shows the saved post's own text (the archive section must not repeat it)
+  function threadShowsPost(view) {
+    const th = (view && view.thread) || [];
+    return (th.length > 1 || th.some((p) => p.quote)) && th.some((p) => p.role === 'self' && p.text);
+  }
+
   // First locally stored photo of a snapshot, or null. Media files are in <archiveDir>/media/.
   function firstLocalMedia(snap) {
     const m = ((snap && snap.media) || []).find((x) => x.local && x.type === 'photo');
@@ -166,5 +185,5 @@
     return { thread, resources, rest, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
   }
 
-  g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia };
+  g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost };
 })(typeof self !== 'undefined' ? self : globalThis);

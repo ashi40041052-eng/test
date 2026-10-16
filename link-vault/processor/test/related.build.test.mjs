@@ -55,10 +55,15 @@ test('ai markdown: sections in order, frontmatter, manifest pk/pu; without relat
   assert.equal(md.split('ソースコード').length - 1, 1, 'the saved post text is written once (本文 only)');
   assert.ok(!md.includes('保存したポスト'), 'no duplicate self block in 文脈');
   const line = manifestLine(item, analysis, snap, record, b);
-  assert.ok(Buffer.byteLength(line) <= 400);
+  assert.ok(Buffer.byteLength(line) <= 640);
   const o = JSON.parse(line);
   assert.equal(o.pk, 'r');
   assert.equal(o.pu, 'https://github.com/builderio/agent-native');
+  // long tags + subject url: all 8 tags survive the cap
+  const tags = ['claude-code', 'agent-native', 'mcp', 'typescript', 'builder-io', 'ai-agents', 'open-source', 'developer-tools'];
+  const long = JSON.parse(manifestLine({ ...item, title: 'エージェントネイティブな開発フレームワークの紹介と使い方まとめ', tags }, analysis, snap, record, b));
+  assert.deepEqual(long.g, tags);
+  assert.equal(long.pu, 'https://github.com/builderio/agent-native');
   // no related data: v2 output (no new keys, no new sections)
   const plain = linkMarkdown(item, record, {}, snap);
   assert.ok(!plain.includes('primary_kind') && !plain.includes('## 主題リソース') && !plain.includes('## 文脈'));

@@ -21,6 +21,7 @@ const MAX_ATTEMPTS = 3;
 const MAX_HEADS = 12; // t.co HEAD resolves per capture
 
 const logDir = () => process.env.LV_LOG_DIR || path.join(HERE, '..', 'logs');
+export const statusFile = () => path.join(logDir(), 'x-replies-status.json');
 const loginFile = () => process.env.LV_XREPLIES_LOGIN_FILE || path.join(logDir(), 'x-login-required.json');
 const lockFile = () => process.env.LV_XREPLIES_LOCK_FILE || path.join(logDir(), 'x-browser.lock');
 export const perRun = () => Number(process.env.LV_XREPLIES_PER_RUN ?? 4);
@@ -130,6 +131,20 @@ export async function resolveLinks(links, heads = { left: MAX_HEADS }) {
   return out;
 }
 
+// ---------- status (logs/x-replies-status.json: last ok / skip reason, for llms.txt and the dashboard header) ----------
+
+export async function writeXrepliesStatus(state, reason, now = new Date()) {
+  if (process.env.NODE_TEST_CONTEXT && !process.env.LV_LOG_DIR) return; // tests must never touch the real logs/
+  try {
+    await fs.mkdir(path.dirname(statusFile()), { recursive: true });
+    const prev = await readJson(statusFile(), {});
+    const same = state !== 'ok' && prev.state === state && (prev.reason || '') === (reason || '');
+    const doc = { state, reason: reason || '', at: same && prev.at ? prev.at : now.toISOString(), // an unchanged skip/error keeps its time (no churn in llms.txt)
+      last_ok_at: state === 'ok' ? now.toISOString() : prev.last_ok_at || null };
+    await fs.writeFile(statusFile(), JSON.stringify(doc, null, 2) + '\n');
+  } catch {}
+}
+
 // ---------- login-required notice (written once; no retry storm) ----------
 
 export const loginRequired = () => fssync.existsSync(loginFile());
@@ -175,19 +190,21 @@ export function xrepliesTrigger() {
  *     replies:[{ n, handle, name, text, time, permalink, own:bool, links:[url] }],   // max 30, other people's replies + the author's own
  *     urls:[{ url, own, count }] }                                                           // unique outbound links, own = author's own reply, count = replies containing it
  */
-export async function captureXReplies({ relatedRoot, id, statusUrl, sid, skipSids = [], budget, now = new Date(), log = () => {} }) {
+async function captureInner({ relatedRoot, id, statusUrl, sid, skipSids = [], budget, now = new Date(), log = () => {} }) {
   const file = path.join(relatedRoot, 'related', 'x-replies.json');
   const attFile = path.join(relatedRoot, 'related', 'x-replies-attempts.json');
   const existing = await readJson(file, null);
   if (existing) return { status: 'done', urls: existing.urls || [] };
-  if (!xrepliesEnabled() || loginRequired() || (budget && budget.xreplies <= 0)) return { status: 'skipped', urls: [] };
+  if (!xrepliesEnabled()) return { status: 'skipped', urls: [], reason: 'disabled (LV_XREPLIES=0 or no browser driver)' };
+  if (loginRequired()) return { status: 'skipped', urls: [], reason: 'login required (delete logs/x-login-required.json after logging in to X in Chrome)' };
+  if (budget && budget.xreplies <= 0) return { status: 'skipped', urls: [] };
   const att = await readJson(attFile, { count: 0, last_at: null });
   if (att.count >= MAX_ATTEMPTS) return { status: 'skipped', urls: [] };
   let drv = driver;
   if (!drv) {
-    if (driverUnavailable) return { status: 'skipped', urls: [] };
+    if (driverUnavailable) return { status: 'skipped', urls: [], reason: `bsk unavailable (${driverUnavailable})` };
     try { drv = await (await import('./x-browser-bsk.mjs')).bskDriver(); }
-    catch (e) { driverUnavailable = String(e.message).slice(0, 80); log(`x-replies: skipped for this run (${driverUnavailable})`); return { status: 'skipped', urls: [] }; }
+    catch (e) { driverUnavailable = String(e.message).slice(0, 80); log(`x-replies: skipped for this run (${driverUnavailable})`); return { status: 'skipped', urls: [], reason: `bsk unavailable (${driverUnavailable})` }; }
   }
   if (budget) budget.xreplies--;
   try {
@@ -195,11 +212,14 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, skipSid
       const delay = () => new Promise((r) => setTimeout(r, process.env.LV_XREPLIES_FAST === '1' ? 0 : 1500 + Math.random() * 2500));
       return drv.loadThread(statusUrl, { maxScrolls: 3, delay });
     });
-    if (locked.busy) { if (budget) budget.xreplies++; return { status: 'skipped', urls: [] }; }
+    if (locked.busy) { if (budget) budget.xreplies++; return { status: 'skipped', urls: [], reason: 'browser busy (another run holds the lock)' }; }
     const page = locked.value;
     const all = page.snapshots.join('\n');
-    if (detectLoginWall(all, page.finalUrl)) { await noteLoginRequired(now, log); return { status: 'login_required', urls: [] }; }
+    if (detectLoginWall(all, page.finalUrl)) { await noteLoginRequired(now, log); return { status: 'login_required', urls: [], reason: 'login required (X login wall)' }; }
     const { main, replies } = parseThread(page.snapshots, sid, skipSids);
+    // The main post is missing from the page (deleted / protected / wrong page / partial load): not a capture.
+    // Throwing counts the attempt (3 max) and writes no file.
+    if (!main) throw new Error('main post not found in thread page');
     const mainHandle = (main?.handle || '').toLowerCase();
     const picked = replies.slice(0, MAX_REPLIES);
     const out = [];
@@ -219,11 +239,17 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, skipSid
     const doc = { schema: 1, id, status_url: statusUrl, sid: String(sid), captured_at: now.toISOString(), main: main ? { handle: main.handle, name: main.name } : null, truncated: replies.length > MAX_REPLIES, replies: out, urls: urls.slice(0, MAX_URLS) };
     await fs.mkdir(path.dirname(file), { recursive: true });
     try { await fs.writeFile(file, JSON.stringify(doc, null, 2) + '\n', { flag: 'wx' }); } catch (e) { if (e.code !== 'EEXIST') throw e; }
-    return { status: 'done', urls: doc.urls };
+    return { status: 'done', urls: doc.urls, reason: 'ok', ok: true };
   } catch (e) {
     log(`x-replies ${id}: ${String(e.message).slice(0, 160)}`);
     await fs.mkdir(path.dirname(attFile), { recursive: true });
     await fs.writeFile(attFile, JSON.stringify({ count: att.count + 1, last_at: now.toISOString(), last_error: String(e.message).slice(0, 300) }, null, 2) + '\n');
-    return { status: 'error', urls: [] };
+    return { status: 'error', urls: [], reason: `error ${id}: ${String(e.message).slice(0, 120)}` };
   }
+}
+
+export async function captureXReplies(opts) {
+  const res = await captureInner(opts);
+  if (res.reason) await writeXrepliesStatus(res.ok ? 'ok' : res.status === 'error' ? 'error' : 'skip', res.ok ? '' : res.reason, opts.now || new Date());
+  return res;
 }

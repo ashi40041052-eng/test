@@ -81,6 +81,7 @@
       state.events = await LV.latestEvents();
     }
     // manifest says which links are archived: the refresh button must see new archives, not the day-old cache
+    state.xr = LOCAL ? await fetch('/logs/x-replies-status.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
     try { state.manifest = DL.parseManifest(await read('ai/manifest.jsonl', 'text', network === 'fresh')); } catch (e) { state.manifest = new Map(); }
     return true;
   }
@@ -200,9 +201,10 @@
       (it.url ? '<button type="button" data-act="open">元URLを開く (o)</button>' : '') + '</div>';
     box.innerHTML = '<div id="subjBox"></div>' + head + analysis + '<div id="thrBox"></div><h4>アーカイブ</h4><div id="archBox" class="muted">読み込み中…</div>' + actions;
     box.scrollTop = 0;
-    renderRelated(id);
+    const relDone = renderRelated(id); // resolves true when the thread (which already shows the saved post) was drawn
     let snap = null, errMsg = '';
     try { snap = await loadSnapshot(id); } catch (e) { errMsg = e.message; }
+    const threadShown = await relDone;
     if (state.sel !== id) return; // user moved on
     const ab = $('#archBox');
     if (!ab) return;
@@ -214,7 +216,7 @@
       '<span>取得 ' + esc(fmtDate(snap.captured_at, true)) + ' (' + esc(snap.captured_by || '') + ')</span>' +
       (snap.stats ? '<span>♥' + (snap.stats.likes ?? '-') + ' ⟲' + (snap.stats.reposts ?? '-') + ' 👁' + (snap.stats.views ?? '-') + '</span>' : '') + '</div>';
     const text = snap.text || (snap.web && snap.web.text) || '';
-    if (text) h += '<div class="body">' + esc(text) + '</div>';
+    if (text && !threadShown) h += '<div class="body">' + esc(text) + '</div>';
     if (snap.article && snap.article.text) h += '<h4>記事' + (snap.article.title ? ': ' + esc(snap.article.title) : '') + '</h4><div class="body">' + esc(snap.article.text) + '</div>';
     if (snap.quote) h += '<h4>引用元' + (snap.quote.author && snap.quote.author.handle ? ' ' + esc(snap.quote.author.handle) : '') + '</h4><div class="quote">' + esc(snap.quote.text || '') + '</div>';
     if (snap.community_note) h += '<h4>コミュニティノート</h4><div class="quote">' + esc(typeof snap.community_note === 'string' ? snap.community_note : JSON.stringify(snap.community_note)) + '</div>';
@@ -273,18 +275,18 @@
   }
   async function renderRelated(id) {
     const rel = await loadRelated(id);
-    if (state.sel !== id) return;
+    if (state.sel !== id) return false;
     const it = state.index && state.index.items.find((x) => x.id === id);
     const repliesDoc = rel ? await loadReplies(id) : null;
-    if (state.sel !== id) return;
+    if (state.sel !== id) return false;
     const v = DL.relatedView(rel, it && it.primary_subject, repliesDoc);
     const sb = $('#subjBox'), tb = $('#thrBox');
-    if (!v || !sb || !tb) return;
+    if (!v || !sb || !tb) return false;
     const dir = LV.archiveDir(id);
     if (v.primary && v.primary.kind === 'resource') {
       const r = v.primary.resource;
       const m = r.meta ? await read(dir + r.meta, 'json').catch(() => null) : null;
-      if (state.sel !== id || !$('#subjBox')) return;
+      if (state.sel !== id || !$('#subjBox')) return false;
       const pi = DL.pkInfo(r.pk);
       sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">' + (pi ? pi[0] + ' ' : '') + esc(r.type) + '</span> <span class="sc-name">' + esc(resName(r, m)) + '</span>' + (noBody(r) ? ' <span class="muted">(本文なし)</span>' : '') + '</div>' +
         ((m && m.description) ? '<div class="sc-desc">' + esc(m.description) + '</div>' : '') +
@@ -302,10 +304,19 @@
     }
     const others = v.rest;
     if (others.length) tb.innerHTML += '<h4>その他のリソース</h4><div class="tr">' + others.map(miniRes).join(' ') + '</div>';
+    return DL.threadShowsPost(v);
   }
 
+  function renderXrStatus() {
+    const el = $('#xrStatus');
+    const t = DL.xrStatusText(state.xr);
+    el.hidden = !t;
+    if (t) { el.textContent = t; el.title = state.xr.reason || ''; el.classList.toggle('warn', state.xr.state !== 'ok'); }
+  }
   function renderAll() {
     recompute();
+    state.sel = DL.keepSelection(state.view, state.sel); // a selection outside the current view is cleared (detail would show a hidden link)
+    renderXrStatus();
     renderSide();
     renderList();
     writeHash();
