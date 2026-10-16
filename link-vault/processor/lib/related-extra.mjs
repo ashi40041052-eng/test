@@ -82,7 +82,7 @@ export async function fetchProfileSites(handle, log = () => {}) {
           const hr = await fetchWithTimeout(u, { headers: { 'User-Agent': 'Mozilla/5.0 (link-vault)', Accept: 'text/html' } });
           if (hr.ok) for (const l of extractHubLinks(await hr.text(), user)) if (!out.includes(l)) out.push(l);
         } catch (e) { log(`profile hub ${u}: ${e.message}`); }
-      } else if (classifyUrl(u) && !JUNK_HOST.test(hostOf(u)) && !out.includes(u)) out.push(u);
+      } else if (classifyUrl(u) && !JUNK_HOST.test(hostOf(u)) && !out.some((x) => hostOf(x) === hostOf(u))) out.push(u); // one link per site
     }
     return { status: out.length ? 'ok' : 'none', urls: out.slice(0, 3) };
   } catch (e) {
