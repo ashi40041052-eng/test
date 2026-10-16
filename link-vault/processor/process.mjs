@@ -18,6 +18,9 @@
  * links whose related.json gained supplement resources (profile website / replies) after their analysis, and the
  * links with captured replies (related/x-replies.json) that the analysis has not seen yet.
  *
+ * analysis/<id>.json carries v (4 = tldr + resources[] readings). A link with readable resources and v < 4 is re-analyzed once by the
+ * related re-check, so `node process.mjs` (or `--no-git` for a trial) migrates old analyses.
+ *
  * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--no-reanalyze-related] [--data <dir>] [--max <n>]
  */
 import fs from 'node:fs/promises';
@@ -36,6 +39,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Failed links are retried on every run up to MAX_ATTEMPTS, then once a day (forever).
 const MAX_ATTEMPTS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Shape of analysis/<id>.json: 4 = tldr + per-resource readings (DESIGN-v4.md). Links with readable resources and an
+// older v are re-analyzed once by the related re-check; links without resources are left as they are.
+const ANALYSIS_V = 4;
 
 // ---------- config ----------
 
@@ -402,7 +408,8 @@ async function main() {
       const f = path.join(dir, 'archive', r.id.slice(0, 4), r.id, 'related.json');
       if (fssync.existsSync(f)) {
         const xr = await readJson(path.join(path.dirname(f), 'related', 'x-replies.json'), null); // other people's replies (v3.2)
-        relatedIds.set(r.id, { added: (await readJson(f, null))?.supplement?.resources_added_at || null, repliesN: xr?.replies?.length || 0, repliesAt: xr?.captured_at || null });
+        const led = await readJson(f, null);
+        relatedIds.set(r.id, { added: led?.supplement?.resources_added_at || null, okRes: (led?.resources || []).filter((x) => x.ok).length, repliesN: xr?.replies?.length || 0, repliesAt: xr?.captured_at || null });
       }
     }
     const todo = CONFIG.archiveOnly ? [] : records.filter((r) => {
@@ -411,6 +418,7 @@ async function main() {
       if (!a) return true;
       if (CONFIG.reanalyzeRelated && a.status === 'analyzed' && relatedIds.has(r.id)) {
         if (!a.primary_subject) return true;
+        if (a.v !== ANALYSIS_V && relatedIds.get(r.id).okRes >= 1) return true; // v4: the resources have not been read one by one yet
         const rel = relatedIds.get(r.id);
         const seenAt = Date.parse(a.analyzed_at) || 0;
         const added = Date.parse(rel.added || '');
@@ -447,6 +455,7 @@ async function main() {
             const a = {
               id: r.id,
               status: 'analyzed',
+              v: ANALYSIS_V,
               analyzed_at: new Date().toISOString(),
               ...rest,
               source: {

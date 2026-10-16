@@ -25,7 +25,7 @@ export function createApiAnalyzer({ model }) {
     if (res.stop_reason === 'refusal') throw new Error(`refused (${res.stop_details?.category ?? 'unknown'})`);
     if (res.stop_reason === 'max_tokens') throw new Error('output truncated (max_tokens)');
     const text = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-    return { ...cleanResult(JSON.parse(text)), model: res.model };
+    return { ...cleanResult(JSON.parse(text), content.related), model: res.model };
   }
 
   return {

@@ -21,7 +21,7 @@
   const PERIODS = { '7': 7 * DAY, '30': 30 * DAY, '365': 365 * DAY };
 
   function haystack(it, meta) {
-    return [it.title, it.summary, it.note, it.url, it.category, it.author && (it.author.name || it.author.handle || it.author),
+    return [it.title, it.tldr, it.summary, it.note, it.url, it.category, it.author && (it.author.name || it.author.handle || it.author),
       (it.tags || []).join(' '), (it.key_points || []).join(' '), meta && meta.a, meta && (meta.g || []).join(' '),
       meta && meta.pu, meta && meta.pn, it.primary_subject && it.primary_subject.name, it.resource_kind]
       .filter(Boolean).join('\n').toLowerCase();
@@ -151,9 +151,51 @@
     });
   }
 
+  // ---- v4: resources first (DESIGN-v4.md section 3/4) ----
+  // Where a resource was found. rank orders the cards: saved post < parent/quote < own continuation < others' replies < profile.
+  const ROLE_WHERE = { self: [1, '保存ポスト内'], parent: [2, '親ポスト'], quote: [2, '引用元'], self_reply: [3, '本人の続き'] };
+  function resourceWhere(r, posts) {
+    const role = new Map((posts || []).map((p) => [p.sid, p.role]));
+    let best = null;
+    (r.found_in || []).forEach((sid) => { const w = ROLE_WHERE[role.get(sid)]; if (w && (!best || w[0] < best[0])) best = w; });
+    if (best) return { rank: best[0], where: best[1] };
+    const o = r.origin || '';
+    if (o === 'x_replies_self') return { rank: 3, where: '本人のリプ' };
+    if (o === 'x_replies') return { rank: 4, where: '他人のリプ' };
+    if (o.indexOf('profile:') === 0) return { rank: 5, where: 'プロフィール ' + o.slice(8) };
+    return { rank: 6, where: o };
+  }
+  // The resource this link was saved for: AI primary_subject first, then the rule-based primary of related.json.
+  function primaryResource(rel, resources, aiPrimary) {
+    if (aiPrimary && aiPrimary.url) {
+      const r = resources.find((x) => normUrl(x.url) === normUrl(aiPrimary.url));
+      if (r) return { resource: r, reason: 'ai' };
+    }
+    const pr = rel && rel.primary;
+    if (pr && pr.kind === 'resource') {
+      const r = resources.find((x) => x.n === pr.n);
+      if (r) return { resource: r, reason: pr.reason || '' };
+    }
+    return null;
+  }
+  // Every resource of a link once (same url dropped), ordered subject -> saved post -> parent/quote -> own continuation
+  // -> others' replies -> profile (ties: discovery order n). Works on related.json alone (the AI reading is optional).
+  function resourceCards(rel, aiPrimary) {
+    if (!rel || !Array.isArray(rel.resources)) return [];
+    const resources = rel.resources.map((r) => Object.assign({}, r, { pk: TYPE_PK[r.type] || 's' }, resourceWhere(r, rel.posts)));
+    const pr = primaryResource(rel, resources, aiPrimary);
+    const seen = new Set();
+    return resources
+      .map((r) => Object.assign(r, { subject: !!(pr && pr.resource.n === r.n) }))
+      .sort((a, b) => (b.subject - a.subject) || (a.rank - b.rank) || ((a.n || 0) - (b.n || 0)))
+      .filter((r) => { const k = normUrl(r.url); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  // Display name of a resource from its meta json (loaded lazily by the dashboard).
+  const resourceTitle = (r, m) => (m && (m.full_name || m.id || m.title)) || r.name || r.key || r.url;
+
   function relatedView(rel, aiPrimary, repliesDoc) {
     if (!rel || !Array.isArray(rel.posts) || !rel.posts.length) return null;
-    const resources = (rel.resources || []).map((r) => Object.assign({}, r, { pk: TYPE_PK[r.type] || 's' }));
+    const resources = (rel.resources || []).map((r) => Object.assign({}, r, { pk: TYPE_PK[r.type] || 's' }, resourceWhere(r, rel.posts)));
     const quotes = new Map();
     rel.posts.filter((p) => p.role === 'quote').forEach((q) => { if (q.of && !quotes.has(q.of)) quotes.set(q.of, q); });
     const view = (p) => {
@@ -173,14 +215,8 @@
     const thread = parents.concat(selfP, replies).map(view).map((p) => Object.assign({}, p, { resources: firstSeen(p.resources) }));
     let primary = null;
     const pr = rel.primary;
-    if (aiPrimary && aiPrimary.url) {
-      const r = resources.find((x) => x.url === aiPrimary.url);
-      if (r) primary = { kind: 'resource', resource: r, reason: 'ai' };
-    }
-    if (!primary && pr && pr.kind === 'resource') {
-      const r = resources.find((x) => x.n === pr.n);
-      if (r) primary = { kind: 'resource', resource: r, reason: pr.reason || '' };
-    }
+    const pres = primaryResource(rel, resources, aiPrimary);
+    if (pres) primary = { kind: 'resource', resource: pres.resource, reason: pres.reason };
     if (!primary && pr && pr.kind === 'post') {
       const p = rel.posts.find((x) => x.sid === pr.sid);
       if (p) primary = { kind: 'post', post: view(p), reason: pr.reason || '' };
@@ -188,8 +224,8 @@
     const pk = primary ? (primary.kind === 'resource' ? primary.resource.pk : 'x') : '-';
     const others = repliesView(repliesDoc, resources).map((r) => Object.assign({}, r, { resources: firstSeen(r.resources) }));
     const rest = resources.filter((r) => !(primary && primary.resource && primary.resource.n === r.n) && !shown.has(normUrl(r.url)));
-    return { thread, resources, rest, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
+    return { thread, resources, cards: resourceCards(rel, aiPrimary), rest, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
   }
 
-  g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost, threadShowsQuote };
+  g.DashLogic = { TYPE_PK, resourceCards, resourceWhere, resourceTitle, PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost, threadShowsQuote };
 })(typeof self !== 'undefined' ? self : globalThis);

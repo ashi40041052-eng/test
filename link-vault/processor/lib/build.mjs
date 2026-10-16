@@ -1,5 +1,9 @@
 import { safeFileName, canonicalTagMap, canonTags } from './util.mjs';
 import { buildAi } from './ai-build.mjs';
+import { resourceName } from './related.mjs';
+import '../../app/dash-logic.js'; // registers globalThis.DashLogic: the same resource ordering as the dashboard
+
+const CHIPS = 3; // resource chips per list card (DESIGN-v4.md section 3)
 
 // Builds the dashboard index and AI-readable markdown from raw records + analyses.
 // Pure function: returns { files: {relativePath: content} }.
@@ -48,6 +52,14 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
       // v3: what the link was saved for (the dashboard shows it ahead of the rule-based primary in related.json)
       if (a.primary_subject?.kind) item.primary_subject = a.primary_subject;
       if (a.resource_kind && a.resource_kind !== 'none') item.resource_kind = a.resource_kind;
+    }
+    // v4: one-line summary + the first resource chips of the list card (order: subject, saved post, parent/quote, own continuation, replies, profile)
+    if (a?.status === 'analyzed' && a.tldr) item.tldr = a.tldr;
+    const bundle = related.get(r.id);
+    const cards = bundle ? globalThis.DashLogic.resourceCards(bundle.ledger, a?.primary_subject) : [];
+    if (cards.length) {
+      item.res = cards.slice(0, CHIPS).map((c) => ({ url: c.url, name: resourceName(c, bundle.res.get(c.n)), type: c.type }));
+      item.res_n = cards.length;
     }
     items.push(item);
   }

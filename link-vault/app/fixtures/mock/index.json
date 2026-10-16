@@ -78,7 +78,21 @@
    ],
    "content_type": "post",
    "author": "@dev_notes",
-   "analyzed_at": "2026-10-15T22:10:00+09:00"
+   "analyzed_at": "2026-10-15T22:10:00+09:00",
+   "tldr": "Claude Code のフックで毎回の確認作業を自動化する手順",
+   "res": [
+    {
+     "url": "https://github.com/example/claude-hooks-kit",
+     "name": "example/claude-hooks-kit",
+     "type": "github"
+    },
+    {
+     "url": "https://docs.example.com/hooks",
+     "name": "docs.example.com/hooks",
+     "type": "web"
+    }
+   ],
+   "res_n": 2
   },
   {
    "id": "20261015-090000-cc33dd44",
@@ -123,7 +137,11 @@
    "content_type": "post",
    "author": "@tts_lab",
    "analyzed_at": "2026-10-14T12:03:05+09:00",
-   "primary_subject": { "kind": "resource", "url": "https://github.com/fishaudio/fish-speech", "name": "fishaudio/fish-speech" },
+   "primary_subject": {
+    "kind": "resource",
+    "url": "https://github.com/fishaudio/fish-speech",
+    "name": "fishaudio/fish-speech"
+   },
    "resource_kind": "repository"
   },
   {

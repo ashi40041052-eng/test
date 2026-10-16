@@ -142,3 +142,57 @@ test('threadShowsQuote: the archive 引用元 is dropped only when the thread al
   assert.equal(DL.threadShowsQuote({ thread: [self] }), false);
   assert.equal(DL.threadShowsQuote(null), false);
 });
+
+// ---- v4: resource cards (DESIGN-v4.md sections 3/4) ----
+const LEDGER = {
+  posts: [
+    { sid: 'p1', role: 'parent', depth: 1, text: 'parent' }, { sid: 's', role: 'self', text: 'saved' },
+    { sid: 'r1', role: 'self_reply', depth: 1, text: 'continued' }, { sid: 'q1', role: 'quote', of: 'p1', text: 'quoted' },
+  ],
+  primary: { kind: 'resource', n: 2 },
+  resources: [
+    { n: 1, type: 'web', url: 'https://site.example/', key: 'site', found_in: [], origin: 'profile:@bob' },
+    { n: 2, type: 'github', url: 'https://github.com/a/b', key: 'a/b', found_in: ['s'] },
+    { n: 3, type: 'web', url: 'https://blog.example/p', key: 'blog', found_in: ['r1'] },
+    { n: 4, type: 'hf', url: 'https://huggingface.co/x/y', key: 'x/y', found_in: [], origin: 'x_replies' },
+    { n: 5, type: 'arxiv', url: 'https://arxiv.org/abs/1', key: '1', found_in: ['q1'] },
+    { n: 6, type: 'github', url: 'https://github.com/c/d', key: 'c/d', found_in: ['s'] },
+    { n: 7, type: 'web', url: 'https://www.BLOG.example/p/', key: 'dup', found_in: ['s'] },
+    { n: 8, type: 'web', url: 'https://own.example/', key: 'own', found_in: [], origin: 'x_replies_self' },
+  ],
+};
+
+test('resourceCards: subject, saved post, parent/quote, own continuation, others replies, profile; same url once', () => {
+  const cards = DL.resourceCards(LEDGER, null);
+  assert.deepEqual(cards.map((c) => c.n), [2, 6, 7, 5, 8, 4, 1], 'n=7 and n=3 are one url: the better place (saved post) wins');
+  assert.deepEqual(cards.map((c) => c.where), ['保存ポスト内', '保存ポスト内', '保存ポスト内', '引用元', '本人のリプ', '他人のリプ', 'プロフィール @bob']);
+  assert.equal(cards[0].subject, true);
+  assert.ok(cards.slice(1).every((c) => !c.subject));
+});
+test('resourceCards: the AI primary_subject wins over the rule-based one; it goes first whatever its origin', () => {
+  const cards = DL.resourceCards(LEDGER, { kind: 'resource', url: 'https://HUGGINGFACE.co/x/y/', name: 'y' });
+  assert.equal(cards[0].n, 4);
+  assert.equal(cards[0].subject, true);
+  assert.equal(cards.filter((c) => c.subject).length, 1);
+});
+test('relatedView: every resource carries its origin label; cards equal resourceCards; without resources there are no cards', () => {
+  const v = DL.relatedView(LEDGER, null, null);
+  assert.equal(v.resources.find((r) => r.n === 1).where, 'プロフィール @bob');
+  assert.equal(v.resources.find((r) => r.n === 3).where, '本人の続き');
+  assert.equal(v.resources.find((r) => r.n === 2).where, '保存ポスト内');
+  assert.deepEqual(v.cards.map((c) => c.n), DL.resourceCards(LEDGER, null).map((c) => c.n));
+  const none = DL.relatedView({ posts: [{ sid: 's', role: 'self', text: 't' }], resources: [], primary: { kind: 'self' } }, null, null);
+  assert.deepEqual(none.cards, []);
+  assert.deepEqual(DL.resourceCards(null, null), []);
+  assert.deepEqual(DL.resourceCards({ posts: [], resources: [] }, null), []);
+});
+test('resourceCards works on related.json alone: a resource without any AI reading or body is still a card', () => {
+  const [c] = DL.resourceCards({ posts: [{ sid: 's', role: 'self' }], primary: { kind: 'self' }, resources: [{ n: 1, type: 'web', url: 'https://x.example', key: 'x', found_in: ['s'], ok: false, error: 'empty body' }] }, null);
+  assert.equal(c.url, 'https://x.example');
+  assert.equal(c.ok, false);
+  assert.equal(DL.resourceTitle(c, null), 'x');
+  assert.equal(DL.resourceTitle(c, { title: 'T' }), 'T');
+});
+test('search finds the tldr', () => {
+  assert.equal(DL.matchesQuery({ title: 'a', tldr: '人とAIが同じ画面' }, null, 'AIが同じ'), true);
+});

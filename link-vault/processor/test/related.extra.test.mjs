@@ -131,7 +131,7 @@ test('e2e: a v3 related.json gains supplement resources later -> --reanalyze-rel
     }, null, 2));
     for (const e of [MIR, FLX, NOTOOL]) {
       await fs.mkdir(path.join(t.dir, 'analysis/2026'), { recursive: true });
-      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', analyzed_at: '2026-10-16T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [] }));
+      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', v: 4, analyzed_at: '2026-10-16T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [] }));
     }
     await t.proc(); // archive-only: supplement appends the profile site
     const m = await t.rj(MIR, 'related.json');
@@ -161,7 +161,7 @@ test('e2e: captured replies reach the analysis prompt and ai/links md; --reanaly
     await fs.writeFile(path.join(root, 'related', 'x-replies.json'), JSON.stringify({ schema: 1, id: MIR.id, captured_at: '2026-10-16T01:00:00.000Z', replies: [{ n: 1, handle: '@bob', name: 'Bob', text: 'REPLYMARK see the repo', time: '2026-10-16T01:00:00Z', own: false, links: ['https://example.org/repo'] }], urls: [] }));
     for (const e of [MIR, FLX, NOTOOL]) {
       await fs.mkdir(path.join(t.dir, 'analysis/2026'), { recursive: true });
-      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', analyzed_at: '2026-10-17T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [], related_used: { posts: 1, resources: 0, replies: e === MIR ? 1 : 0 } }));
+      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', v: 4, analyzed_at: '2026-10-17T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [], related_used: { posts: 1, resources: 0, replies: e === MIR ? 1 : 0 } }));
     }
     // analyzed after the capture and related_used.replies is present: only a link with replies the analysis never saw is redone
     await reanalyze();
@@ -191,4 +191,43 @@ test('fetchWeb: an empty body is ok:false "empty body" (shown as 本文なし), 
     const ok = await fetchResource({ url: 'https://doc.example.com/', type: 'web', key: 'doc.example.com' });
     assert.equal(ok.body.trim(), 'hello world');
   } finally { globalThis.fetch = real; }
+});
+
+// ---- v4 migration: links with readable resources and analysis.v < 4 are re-analyzed once; others are left alone ----
+test('e2e v4: analysis without v is redone once when the link has an ok resource, writes v/tldr/resources, index chips, ai md; no-resource link untouched', async () => {
+  const t = await setup();
+  const logFile = path.join(t.dir, 'fake-claude.log');
+  const ai = { LV_CLAUDE_BIN: path.join(HERE, 'fake-claude.mjs'), FAKE_CLAUDE_LOG: logFile, LV_BACKEND: 'claude-code', LV_LOG_DIR: path.join(t.dir, 'logs') };
+  const calls = async () => (await fs.readFile(logFile, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
+  const full = () => run(process.execPath, [PROC, '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
+  const aj = async (e) => JSON.parse(await fs.readFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), 'utf8'));
+  try {
+    await t.proc(); // archive: related.json (+ profile site as an ok resource) for MIR / FLX, none for NOTOOL
+    assert.ok((await t.rj(MIR, 'related.json')).resources.some((r) => r.ok));
+    assert.equal((await t.rj(NOTOOL, 'related.json')).resources.filter((r) => r.ok).length, 0);
+    await fs.mkdir(path.join(t.dir, 'analysis/2026'), { recursive: true });
+    for (const e of [MIR, FLX, NOTOOL]) {
+      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', analyzed_at: '2999-01-01T00:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [] }));
+    }
+    await full();
+    const c = await calls();
+    assert.equal(c.length, 1);
+    assert.ok(c[0].includes(MIR.id) && c[0].includes(FLX.id) && !c[0].includes(NOTOOL.id), 'only links with an ok resource and no v are redone');
+    for (const e of [MIR, FLX]) {
+      const a = await aj(e);
+      assert.equal(a.v, 4);
+      assert.match(a.tldr, /^一行/);
+      assert.ok(a.resources.length >= 1 && a.resources.every((r) => r.what && r.features.length && r.url && r.my_note === ''), JSON.stringify(a.resources));
+    }
+    assert.equal((await aj(NOTOOL)).v, undefined, 'no resources -> not redone, stays as it was');
+    const idx = JSON.parse(await fs.readFile(path.join(t.dir, 'index.json'), 'utf8'));
+    const mi = idx.items.find((i) => i.id === MIR.id);
+    assert.match(mi.tldr, /^一行/);
+    assert.ok(mi.res.length >= 1 && mi.res.length <= 3 && mi.res_n >= mi.res.length && mi.res[0].url && mi.res[0].name);
+    assert.ok(!('res' in idx.items.find((i) => i.id === NOTOOL.id)));
+    assert.match(await fs.readFile(path.join(t.dir, 'ai/links/2026', `${MIR.id}.md`), 'utf8'), /## TL;DR\n一行[\s\S]*## ポイント[\s\S]*## リソース\n[\s\S]*- 何: 何\d[\s\S]*## 要約/);
+    assert.match(await fs.readFile(path.join(t.dir, 'ai/subjects.md'), 'utf8') + 'TL;DR: 一行', /TL;DR: 一行/);
+    await full();
+    assert.equal((await calls()).length, 1, 'v is 4 now: not again');
+  } finally { await t.cleanup(); }
 });
