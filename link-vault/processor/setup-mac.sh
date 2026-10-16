@@ -84,6 +84,9 @@ else
 fi
 info "$APP_DIR"
 (cd "$PROC_DIR" && npm ci --silent --no-audit --no-fund)
+# X の返信をブラウザで読むための Chromium(何度実行しても安全。すでにあれば何もしない)
+(cd "$PROC_DIR" && npx --no-install playwright install chromium >/dev/null 2>&1) && info "Chromium(playwright) 用意済み" || info "（Chromium の用意に失敗。返信の取得だけ自動でスキップされます）"
+info "他人のリプライも読みたいときは、一度だけ: cd \"$PROC_DIR\" && npm run x-login  （開いたウィンドウで X にログインして閉じる）"
 
 # ---------- 4. data repo ----------
 step "4/7 データ用リポジトリ（$DATA_REPO）を用意"

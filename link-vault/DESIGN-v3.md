@@ -175,3 +175,14 @@ fixture は**実 API の応答を保存して使う**: `test/fixtures/related/fx
 - 枠: 1 ランあたり `LV_XSEARCH_PER_RUN`(既定 3)。応答/終了コードが spending-limit・quota・rate・auth 系なら `processor/logs/xsearch-cooldown.json`(`LV_XSEARCH_COOLDOWN_FILE`)に 24 時間のクールダウンを書き、その間は検索しない。`LV_XSEARCH=0` で無効、`LV_GROK_BIN` でコマンド差し替え(テストは偽バイナリ)、`LV_XSEARCH_FORCE=1` は動作確認用(条件を無視)。`LV_FXTWITTER_BASE` を差し替えているのに `LV_GROK_BIN` が無い環境では実バイナリを絶対に呼ばない。
 - **既存の related.json への追記**: `related.json` は作成時のみ書くが、補足取得だけは**追記専用**で既存台帳を更新する(既存の資源・番号は変えない。新資源は番号を続けて付け、`primary` だけ再計算、`supplement:{v:1,profile_done,xsearch_done}` を記録。tmp+rename)。`supplement` が済んだリンクは再実行しても何も変わらない。
 - 実応答 fixture: `test/fixtures/related/fx-user-MireloAI.json`, `fx-user-bfl_ai.json`, `hub-linktree-mirelo.html`(`record-fixtures.sh` に追記)。テスト: `test/related.extra.test.mjs`。
+
+## 付録: v3.2 他人のリプをブラウザで読む(既定の返信ソース)
+
+Grok X 検索の代わりに、**本人が自分でログインした X のセッション**を実ブラウザ(playwright の Chromium、永続プロファイル `~/.link-vault/x-profile`、`LV_X_PROFILE`)で読む。Grok 経路(`LV_XSEARCH=1` のときだけ)は従来どおり残し、既定は無効のまま。
+
+- **ログイン**: `npm run x-login` を一度だけ手で実行(ヘッドフルで x.com/login を開き、本人がログインしてウィンドウを閉じる→`auth_token` クッキーの*有無だけ*を確認して ✓/✗)。資格情報・クッキー値は読まない/表示しない/保存しない。
+- **取得** (`processor/lib/x-replies.mjs`, ブラウザ層は `x-browser.mjs` で差し替え可能): ステータス URL をヘッドレスで開き、記事が出るまで待ち、最大3回、1.5〜4 秒の間隔でゆっくりスクロール。メイン投稿以外の記事から投稿者・本文・時刻・permalink・外向きリンクを最大 30 件。t.co は `title`/表示テキストの実 URL を優先し、無ければ HEAD(リダイレクト非追従)で解決(ブラウザ遷移なし)。ログイン壁(`/login` への遷移、`loginButton` 等)は `{status:'login_required'}` を返し、`logs/x-login-required.json` を**一度だけ**書く(これがある間は全リンクで取得を止める=再試行の嵐なし。`x-login` が ✓ で消す)。
+- **保存(create-only)**: `archive/<y>/<id>/related/x-replies.json` = `{schema:1,id,status_url,sid,captured_at,main:{handle,name},truncated,replies:[{n,handle,name,text,time,permalink,own,links[]}],urls:[{url,own}]}`。0 件でも書く(= 1 リンク 1 回)。失敗は `x-replies-attempts.json`、3 回で打ち切り。
+- **候補とスコア**: リプ内 URL は `origin="x_replies"`(+2、v3.1 の x_search と同じ)、本人自身のリプは `x_replies_self`(+3)。`related.json` には v3.1 と同じ追記専用の仕組みで足し、`supplement.xreplies_done` を記録。
+- **発動**: x_search と同条件(本文がリプ欄を指し自己スレッドに URL 無し/資源 0 件でツール系の話)に加え、**直近 7 日に保存され主題が resource でないリンクは常に**。枠は 1 ランあたり `LV_XREPLIES_PER_RUN`(既定 4。20 分ごとの `--archive-only` と本ランのどちらでも)、`logs/x-browser.lock` で同時に 1 ブラウザだけ。playwright/プロファイルが無ければログ 1 行で静かにスキップ。`LV_XREPLIES=0` で無効(既定はプロファイルがあれば有効)。`LV_FXTWITTER_BASE` を差し替えたテスト環境では注入ドライバが無い限り実ブラウザを起動しない。
+- テスト: `test/x-replies.test.mjs`(偽ドライバ+HTML fixture、実ブラウザ/ネットワークなし)。
