@@ -1,7 +1,7 @@
 /* Link Vault service worker: offline app shell + background sync. */
 importScripts('./core.js');
 
-const CACHE = 'lv-shell-v3';
+const CACHE = 'lv-shell-v4';
 const SHELL_MARKER = 'id="pasteBtn"'; // present only in this app's index.html
 const SHELL = ['./', './index.html', './style.css', './core.js', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
@@ -52,7 +52,8 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('sync', (e) => {
   if (e.tag !== 'lv-sync') return;
   e.waitUntil(
-    self.LV.syncAll().then((r) => {
+    // Snapshot captures started by syncAll are best-effort; wait for them (never fail on them).
+    self.LV.syncAll().then((r) => self.LV.capturesIdle().catch(() => {}).then(() => r)).then((r) => {
       if (r.configured && r.pending > 0 && !r.error) throw new Error('pending items remain; retry later');
       return self.clients.matchAll().then((cs) => cs.forEach((c) => c.postMessage({ type: 'synced', result: r })));
     })

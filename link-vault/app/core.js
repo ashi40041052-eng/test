@@ -279,6 +279,155 @@
     return 'retry';
   }
 
+
+  // ---------- snapshot capture (phone-side archive, DESIGN-v2 section 1.3 route A) ----------
+  // Best-effort and strictly separate from saving: it runs only AFTER a link's PUT succeeded,
+  // is never awaited by syncAll, never throws to the caller, and writes create-only files
+  // (PUT without sha; 422 = already there = fine). Anything it cannot finish is picked up by
+  // the processor's archive-only run. Only X posts are captured here (fxtwitter is CORS-open).
+
+  // Same expression as processor/lib/fetch-content.mjs X_STATUS: keep the two in sync.
+  const X_STATUS = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:([A-Za-z0-9_]{1,15})|i(?:\/web)?)\/status(?:es)?\/(\d+)/i;
+  const MEDIA_MAX_ONE = 3 * 1024 * 1024, MEDIA_MAX_COUNT = 4, MEDIA_MAX_TOTAL = 10 * 1024 * 1024;
+
+  function parseXStatus(url) {
+    const m = (url || '').match(X_STATUS);
+    return m ? { user: m[1] || 'i', statusId: m[2] } : null;
+  }
+
+  function archiveDir(id) { return 'archive/' + id.slice(0, 4) + '/' + id + '/'; }
+
+  function tsIso(sec) { return typeof sec === 'number' && sec > 0 ? new Date(sec * 1000).toISOString().replace(/\.\d+Z$/, 'Z') : null; }
+
+  function fxAuthor(a) {
+    if (!a) return null;
+    const h = a.screen_name ? '@' + a.screen_name : null;
+    return { name: a.name || null, handle: h, url: a.url || (a.screen_name ? 'https://x.com/' + a.screen_name : null) };
+  }
+
+  function fxMedia(m) {
+    const all = (m && m.all) || [];
+    return all.map((x, i) => ({
+      n: i + 1, type: x.type === 'photo' ? 'photo' : x.type === 'gif' ? 'gif' : 'video', url: x.url || null,
+      width: x.width || null, height: x.height || null, alt: x.altText || x.alt_text || null, local: null,
+    }));
+  }
+
+  // fxtwitter tweet -> snapshot (schema 1, DESIGN-v2 1.2). Pure.
+  function snapshotFromFx(tweet, rec, capturedAt) {
+    const au = fxAuthor(tweet.author);
+    const text = tweet.text || tweet.raw_text || '';
+    const q = tweet.quote;
+    const art = tweet.article;
+    const head = text.replace(/\s+/g, ' ').trim().slice(0, 60);
+    return {
+      schema: 1, id: rec.id, url: rec.url,
+      canonical_url: tweet.url || (au && au.handle ? 'https://x.com/' + au.handle.slice(1) + '/status/' + tweet.id : rec.url),
+      captured_at: capturedAt, captured_by: 'phone', source_type: 'x',
+      title: (au && au.name ? au.name + ': ' : '') + head,
+      author: au,
+      published_at: tsIso(tweet.created_timestamp),
+      lang: tweet.lang || null,
+      text: text, html_text: null,
+      quote: q ? { url: q.url || null, author: fxAuthor(q.author), published_at: tsIso(q.created_timestamp),
+        text: q.text || q.raw_text || '', media: fxMedia(q.media) } : null,
+      article: art ? { title: art.title || null, text: art.preview_text || art.text || '' } : null,
+      replying_to: tweet.replying_to || null,
+      community_note: tweet.community_note || null,
+      media: fxMedia(tweet.media),
+      web: null,
+      stats: { likes: tweet.likes == null ? null : tweet.likes, reposts: tweet.retweets == null ? null : tweet.retweets, views: tweet.views == null ? null : tweet.views },
+      raw: { fxtwitter: tweet },
+    };
+  }
+
+  function mediaExt(url, contentType) {
+    let ext = '';
+    try { ext = (new URL(url).pathname.match(/\.([A-Za-z0-9]{2,4})$/) || [])[1] || ''; } catch (e) { /* fall through */ }
+    if (!ext) ext = ({ 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[contentType] || 'jpg');
+    return ext.toLowerCase();
+  }
+
+  function b64bytes(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  async function sha256hex(buf) {
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+    return Array.from(h, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Create-only PUT of base64 content. Returns 'ok' | 'retry' | 'fatal:<status>'.
+  async function putNew(cfg, path, b64, message) {
+    const body = JSON.stringify({ message: message, content: b64, branch: cfg.branch });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let r;
+      try { r = await fetch(apiUrl(cfg, path), { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, headers(cfg)), body: body }); }
+      catch (e) { return 'retry'; }
+      if (r.status === 200 || r.status === 201 || r.status === 422) return 'ok'; // 422 = already exists
+      if (r.status === 409 || r.status >= 500 || r.status === 429) { await sleep(1000 * (attempt + 1)); continue; }
+      return 'fatal:' + r.status;
+    }
+    return 'retry';
+  }
+
+  // Downloads photos (<=3MB each, <=4, <=10MB total). Returns [{m, buf, ext, sha, bytes}].
+  async function downloadPhotos(snap) {
+    const got = [];
+    let total = 0;
+    for (const m of snap.media) {
+      if (m.type !== 'photo' || !m.url || got.length >= MEDIA_MAX_COUNT) continue;
+      try {
+        const r = await fetch(m.url);
+        if (!r.ok) continue;
+        if (Number(r.headers.get('content-length') || 0) > MEDIA_MAX_ONE) continue;
+        const buf = await r.arrayBuffer();
+        if (buf.byteLength > MEDIA_MAX_ONE || total + buf.byteLength > MEDIA_MAX_TOTAL) continue;
+        total += buf.byteLength;
+        got.push({ m: m, buf: buf, ext: mediaExt(m.url, r.headers.get('content-type')), sha: await sha256hex(buf), bytes: buf.byteLength });
+      } catch (e) { /* skip this image */ }
+    }
+    return got;
+  }
+
+  // Never rejects. Resolves 'skipped' | 'done' | 'failed'.
+  async function captureSnapshot(cfg, item) {
+    try {
+      const x = parseXStatus(item && item.url);
+      if (!x || !isConfigured(cfg) || (g.navigator && g.navigator.onLine === false)) return 'skipped';
+      const dir = archiveDir(item.id);
+      const snapPath = dir + 'snapshot.json';
+      if (await remoteExists(cfg, snapPath)) return 'skipped'; // processor (or an earlier run) did it
+      const r = await fetch('https://api.fxtwitter.com/' + x.user + '/status/' + x.statusId, { headers: { Accept: 'application/json' } });
+      if (!r.ok) return 'failed'; // 404 etc.: the processor records attempts/gone
+      const tweet = (await r.json()).tweet;
+      if (!tweet) return 'failed';
+      const snap = snapshotFromFx(tweet, { id: item.id, url: item.url }, new Date().toISOString().replace(/\.\d+Z$/, 'Z'));
+      // Photos first so snapshot.media[].local is truthful; each is its own create-only file.
+      for (const p of await downloadPhotos(snap)) {
+        const name = String(p.m.n).padStart(2, '0') + '.' + p.ext;
+        if (await putNew(cfg, dir + 'media/' + name, b64bytes(p.buf), 'archive media ' + item.id) === 'ok') {
+          p.m.local = 'media/' + name; p.m.bytes = p.bytes; p.m.sha256 = p.sha;
+        }
+      }
+      return (await pushFile(cfg, snapPath, snap, 'archive snapshot ' + item.id)) === 'ok' ? 'done' : 'failed';
+    } catch (e) {
+      return 'failed';
+    }
+  }
+
+  // Captures started by syncAll; the service worker waits on these so the browser keeps it alive.
+  const captures = new Set();
+  function startCapture(cfg, item) {
+    const p = new Promise((res) => queueMicrotask(() => captureSnapshot(cfg, item).then(res, () => res('failed'))));
+    captures.add(p);
+    p.then(() => captures.delete(p));
+  }
+  const capturesIdle = () => Promise.all(Array.from(captures));
+
   let syncing = null;
   function syncAll() {
     if (syncing) return syncing;
@@ -298,6 +447,7 @@
           x.sync_error = null;
           await save(x);
           res.pushed++;
+          if (push === pushItem && x.url) startCapture(cfg, x); // best-effort, not awaited
         } else {
           res.failed++;
           if (out.startsWith('fatal:')) {
@@ -345,5 +495,8 @@
     setDeleted, latestEvents, getAllEvents,
     getConfig, setConfig, isConfigured, syncAll, fetchIndex, cachedIndex, testConnection,
     remotePath, isoLocal,
+    captureSnapshot, capturesIdle, snapshotFromFx, parseXStatus, archiveDir,
+    // dashboard helpers
+    kvGet, kvSet, apiUrl, headers,
   };
 })(self);
