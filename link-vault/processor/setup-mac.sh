@@ -168,6 +168,26 @@ if [ "$OS" = "Darwin" ]; then
   launchctl bootout "gui/$(id -u)/$ALABEL" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$APLIST"
   info "20分ごとの保存（アーカイブ）も登録しました。止めたいとき: launchctl bootout gui/$(id -u)/$ALABEL"
+
+  # local PC dashboard (no token): always-on server on 127.0.0.1:4848 reading the cloned data repo
+  DLABEL="com.linkvault.dashboard"
+  DPLIST="$HOME/Library/LaunchAgents/$DLABEL.plist"
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+    echo '<plist version="1.0"><dict>'
+    echo "  <key>Label</key><string>$DLABEL</string>"
+    echo "  <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$PROC_DIR/dashboard-server.mjs</string></array>"
+    echo "  <key>WorkingDirectory</key><string>$PROC_DIR</string>"
+    echo "  <key>StandardOutPath</key><string>$PROC_DIR/logs/launchd-dashboard.log</string>"
+    echo "  <key>StandardErrorPath</key><string>$PROC_DIR/logs/launchd-dashboard.log</string>"
+    echo '  <key>RunAtLoad</key><true/>'
+    echo '  <key>KeepAlive</key><true/>'
+    echo '</dict></plist>'
+  } > "$DPLIST"
+  launchctl bootout "gui/$(id -u)/$DLABEL" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$DPLIST"
+  info "PC用ダッシュボード: http://127.0.0.1:4848/ （トークン不要。ブックマークしてください）"
 else
   have crontab || fail "crontab がありません。cron をインストールしてから再実行してください"
   MARK="# link-vault-processor"
