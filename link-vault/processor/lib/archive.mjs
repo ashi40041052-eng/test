@@ -102,7 +102,8 @@ export function snapshotFromFx(fx, record, { capturedAt = new Date(), capturedBy
     captured_at: iso(new Date(capturedAt).toISOString()),
     captured_by: capturedBy,
     source_type: 'x',
-    title: `${t.author?.name || ''} (${author?.handle || ''}) のポスト`.trim(),
+    // "<name>: <first 60 chars>" — identical rule in app/core.js snapshotFromFx (keep in sync)
+    title: `${t.author?.name ? `${t.author.name}: ` : ''}${String(t.text || t.raw_text?.text || '').replace(/\s+/g, ' ').trim().slice(0, 60)}`,
     author,
     published_at: iso(t.created_timestamp) || iso(t.created_at),
     lang: t.lang || null,
@@ -110,7 +111,7 @@ export function snapshotFromFx(fx, record, { capturedAt = new Date(), capturedBy
     html_text: null,
     quote: q ? {
       url: q.url || null, author: authorOf(q.author), published_at: iso(q.created_timestamp) || iso(q.created_at),
-      text: q.text || '', media: q.media?.all || [],
+      text: q.text || q.raw_text?.text || '', media: mediaFromFx(q.media?.all),
     } : null,
     article: t.article ? { title: t.article.title || '', text: articleText(t.article) } : null,
     replying_to: t.replying_to ?? null,

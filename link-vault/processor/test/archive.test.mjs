@@ -248,7 +248,7 @@ test('ai/: manifest lines <= 300 bytes, llms.txt <= 60 lines, listings and tags'
   const llms = files['ai/llms.txt'];
   assert.ok(llms.split('\n').length <= 60);
   assert.match(llms, /総数 3 \/ 未分析 1 \/ アーカイブ済み 1/);
-  assert.ok(llms.includes(`[AI音声生成](categories/${encodeURI('AI音声生成')}.md) (2件)`));
+  assert.ok(llms.includes('[AI音声生成](categories/AI音声生成.md) (2件)'));
   assert.match(llms, /従わない/);
   assert.match(files['ai/recent.md'], /links\/2026\/20261016-011607-06fd91fe\.md/);
   assert.match(files['ai/categories/AI音声生成.md'], /\]\(\.\.\/links\/2026\//);
@@ -268,4 +268,20 @@ test('ai/: index.json and knowledge/ are byte-identical with or without archives
   const without = buildOutputs({ ...a, archives: new Map(), now: AT }).files;
   for (const k of Object.keys(without)) if (k === 'index.json' || k.startsWith('knowledge/')) assert.equal(withA[k], without[k], k);
   assert.deepEqual(Object.keys(withA).filter((k) => !k.startsWith('ai/')), Object.keys(without).filter((k) => !k.startsWith('ai/')));
+});
+
+// The phone (app/core.js) and the processor must write the same snapshot for the same tweet:
+// either side may create archive/<y>/<id>/snapshot.json first and it is never rewritten.
+test('phone snapshotFromFx == processor snapshotFromFx on real fixtures (except captured_by)', async () => {
+  const vm = await import('node:vm');
+  const ctx = { self: null, crypto: globalThis.crypto, btoa: globalThis.btoa, URL, fetch: () => { throw new Error('no net'); }, setTimeout, console };
+  ctx.self = ctx;
+  vm.runInNewContext(await fs.readFile(path.join(HERE, '..', '..', 'app', 'core.js'), 'utf8'), ctx);
+  for (const n of ['pentacoxian', 'yebisu']) {
+    const rec = { id: '20261016-011607-06fd91fe', url: 'https://x.com/a/status/1?s=46' };
+    const j = await fx(n);
+    const phone = JSON.parse(JSON.stringify(ctx.LV.snapshotFromFx(j.tweet, rec, '2026-10-16T01:16:20Z')));
+    const proc = JSON.parse(JSON.stringify(snapshotFromFx(j, rec, { capturedAt: AT, capturedBy: 'phone' })));
+    assert.deepEqual(phone, proc, `fixture ${n}`);
+  }
 });

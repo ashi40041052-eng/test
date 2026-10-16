@@ -32,17 +32,19 @@
 
   // ---------- data layer ----------
   const CACHE_TTL = DAY_MS;
-  async function read(path, kind) { // kind: json | text | blob. Resolves null when missing.
+  async function read(path, kind, fresh) { // kind: json | text | blob. Resolves null when missing. fresh: skip the 1-day cache.
     if (MOCK) {
       const r = await fetch('fixtures/mock/' + path);
       if (!r.ok) return null;
       return kind === 'json' ? r.json() : kind === 'blob' ? r.blob() : r.text();
     }
     const key = 'dash-cache:' + path;
-    try {
-      const c = await LV.kvGet(key);
-      if (c && Date.now() - c.at < CACHE_TTL) return c.data;
-    } catch (e) { /* cache is optional */ }
+    if (!fresh) {
+      try {
+        const c = await LV.kvGet(key);
+        if (c && Date.now() - c.at < CACHE_TTL) return c.data;
+      } catch (e) { /* cache is optional */ }
+    }
     const cfg = state.cfg;
     const r = await fetch(LV.apiUrl(cfg, path) + '?ref=' + encodeURIComponent(cfg.branch), { headers: LV.headers(cfg, true) });
     if (r.status === 404) return null;
@@ -75,7 +77,8 @@
       if (network !== false) { try { state.index = (await LV.fetchIndex()) || state.index; } catch (e) { if (!state.index) throw e; } }
       state.events = await LV.latestEvents();
     }
-    try { state.manifest = DL.parseManifest(await read('ai/manifest.jsonl', 'text')); } catch (e) { state.manifest = new Map(); }
+    // manifest says which links are archived: the refresh button must see new archives, not the day-old cache
+    try { state.manifest = DL.parseManifest(await read('ai/manifest.jsonl', 'text', network === 'fresh')); } catch (e) { state.manifest = new Map(); }
     return true;
   }
 
@@ -304,7 +307,7 @@
 
   async function init(reload) {
     try {
-      const ok = await loadAll(true);
+      const ok = await loadAll(reload === true ? 'fresh' : true);
       $('#setup').hidden = ok;
       $('#layout').hidden = !ok;
       if (!ok) return;

@@ -297,41 +297,56 @@
 
   function archiveDir(id) { return 'archive/' + id.slice(0, 4) + '/' + id + '/'; }
 
+  function isoAny(v) { const t = v ? new Date(v).getTime() : NaN; return isFinite(t) ? new Date(t).toISOString().replace(/\.\d+Z$/, 'Z') : null; }
   function tsIso(sec) { return typeof sec === 'number' && sec > 0 ? new Date(sec * 1000).toISOString().replace(/\.\d+Z$/, 'Z') : null; }
 
   function fxAuthor(a) {
     if (!a) return null;
     const h = a.screen_name ? '@' + a.screen_name : null;
-    return { name: a.name || null, handle: h, url: a.url || (a.screen_name ? 'https://x.com/' + a.screen_name : null) };
+    return { name: a.name || null, handle: h, url: a.screen_name ? 'https://x.com/' + a.screen_name : null };
   }
 
+  // Same mapping as processor/lib/archive.mjs mediaFromFx (keep in sync): video/gif -> smallest mp4 variant.
   function fxMedia(m) {
     const all = (m && m.all) || [];
-    return all.map((x, i) => ({
-      n: i + 1, type: x.type === 'photo' ? 'photo' : x.type === 'gif' ? 'gif' : 'video', url: x.url || null,
-      width: x.width || null, height: x.height || null, alt: x.altText || x.alt_text || null, local: null,
-    }));
+    return all.map((x, i) => {
+      let url = x.url;
+      if (x.type === 'video' || x.type === 'gif') {
+        const mp4 = (x.variants || x.formats || []).filter((v) => v && v.url && (!v.content_type || /mp4/.test(v.content_type)) && /\.mp4/.test(v.url));
+        mp4.sort((a, b) => (a.bitrate == null ? Infinity : a.bitrate) - (b.bitrate == null ? Infinity : b.bitrate));
+        if (mp4[0]) url = mp4[0].url;
+      }
+      return { n: i + 1, type: x.type === 'gif' ? 'gif' : x.type === 'video' ? 'video' : 'photo', url: url,
+        width: x.width == null ? null : x.width, height: x.height == null ? null : x.height, alt: x.altText || x.alt_text || null,
+        local: null, bytes: null, sha256: null };
+    }).filter((x) => x.url);
+  }
+
+  function fxArticleText(a) {
+    const blocks = a && a.content && a.content.blocks;
+    const body = Array.isArray(blocks) ? blocks.map((b) => b && b.text).filter(Boolean).join('\n\n') : '';
+    return body || (a && a.preview_text) || '';
   }
 
   // fxtwitter tweet -> snapshot (schema 1, DESIGN-v2 1.2). Pure.
   function snapshotFromFx(tweet, rec, capturedAt) {
     const au = fxAuthor(tweet.author);
-    const text = tweet.text || tweet.raw_text || '';
+    const text = tweet.text || (tweet.raw_text && tweet.raw_text.text) || '';
     const q = tweet.quote;
     const art = tweet.article;
     const head = text.replace(/\s+/g, ' ').trim().slice(0, 60);
     return {
       schema: 1, id: rec.id, url: rec.url,
-      canonical_url: tweet.url || (au && au.handle ? 'https://x.com/' + au.handle.slice(1) + '/status/' + tweet.id : rec.url),
+      canonical_url: au && au.handle ? 'https://x.com/' + au.handle.slice(1) + '/status/' + tweet.id : (tweet.url || rec.url),
       captured_at: capturedAt, captured_by: 'phone', source_type: 'x',
       title: (au && au.name ? au.name + ': ' : '') + head,
       author: au,
-      published_at: tsIso(tweet.created_timestamp),
+      published_at: tsIso(tweet.created_timestamp) || isoAny(tweet.created_at),
       lang: tweet.lang || null,
       text: text, html_text: null,
       quote: q ? { url: q.url || null, author: fxAuthor(q.author), published_at: tsIso(q.created_timestamp),
-        text: q.text || q.raw_text || '', media: fxMedia(q.media) } : null,
-      article: art ? { title: art.title || null, text: art.preview_text || art.text || '' } : null,
+        text: q.text || (q.raw_text && q.raw_text.text) || '', media: fxMedia(q.media) } : null,
+      article: art ? { title: art.title || '', text: fxArticleText(art) } : null,
       replying_to: tweet.replying_to || null,
       community_note: tweet.community_note || null,
       media: fxMedia(tweet.media),
@@ -440,6 +455,7 @@
       // Links first, then delete/restore events (oldest first, so the latest action wins).
       const queue = pending.map((x) => ({ x, push: pushItem, save: putItem }))
         .concat(events.map((x) => ({ x, push: pushEvent, save: putEvent })));
+      const toCapture = []; // started after the loop: captures never compete with the saves above for the branch
       for (const { x, push, save } of queue) {
         const out = await push(cfg, x);
         if (out === 'ok') {
@@ -447,7 +463,7 @@
           x.sync_error = null;
           await save(x);
           res.pushed++;
-          if (push === pushItem && x.url) startCapture(cfg, x); // best-effort, not awaited
+          if (push === pushItem && x.url) toCapture.push(x);
         } else {
           res.failed++;
           if (out.startsWith('fatal:')) {
@@ -459,6 +475,7 @@
         }
       }
       res.pending -= res.pushed;
+      toCapture.forEach((x) => startCapture(cfg, x)); // best-effort, not awaited
       return res;
     };
     const locked = (g.navigator && g.navigator.locks)

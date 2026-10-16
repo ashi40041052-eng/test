@@ -20,7 +20,8 @@ export function yamlScalar(v, flow = false) {
 const yamlList = (a) => `[${(a || []).map((x) => yamlScalar(x, true)).join(', ')}]`;
 const oneLine = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
 // keep user-controlled text from forging headings of our own structure
-const escapeHeadings = (t) => String(t || '').replace(/^(\s*)#/gm, '$1\\#');
+// (only "# " / "## " … count as headings; hashtags like "#TTS" are left alone)
+const escapeHeadings = (t) => String(t || '').replace(/^(\s*)(#{1,6})(?=\s|$)/gm, '$1\\$2');
 const ymd = (s) => (s ? String(s).slice(0, 10) : null);
 const year = (id) => id.slice(0, 4);
 
@@ -96,7 +97,8 @@ export function manifestLine(item, analysis, snap, record) {
     ar: snap ? 1 : 0, f: `links/${year(item.id)}/${item.id}.md`,
   };
   let line = JSON.stringify(o);
-  // title is the only unbounded field: shrink it until the line fits
+  // too long: drop tags first (title is what people grep), then shrink the title
+  while (Buffer.byteLength(line) > MANIFEST_MAX_BYTES && o.g.length > 2) { o.g.pop(); line = JSON.stringify(o); }
   while (Buffer.byteLength(line) > MANIFEST_MAX_BYTES && o.t.length > 1) {
     o.t = o.t.slice(0, Math.max(1, o.t.length - Math.max(1, Math.ceil((Buffer.byteLength(line) - MANIFEST_MAX_BYTES) / 3))));
     line = JSON.stringify(o);
@@ -188,7 +190,7 @@ export function buildAi({ items, byId, analyses, archives, cats, lastChange, pen
     '## カテゴリ',
   ];
   const room = LLMS_MAX_LINES - head.length - 1;
-  const catLines = used.map((c) => `- [${c.name}](categories/${encodeURI(safeFileName(c.name))}.md) (${c.count}件): ${oneLine(c.description, 80)}`);
+  const catLines = used.map((c) => `- [${c.name}](categories/${safeFileName(c.name)}.md) (${c.count}件): ${oneLine(c.description, 80)}`);
   const shown = catLines.length > room ? [...catLines.slice(0, room - 1), `- …ほか ${catLines.length - room + 1} カテゴリ(categories/ ディレクトリを参照)`] : catLines;
   files['ai/llms.txt'] = [...head, ...shown, ''].join('\n');
   return files;
