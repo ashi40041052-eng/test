@@ -21,6 +21,8 @@ test('filters: trash, category, AND search, period, state', () => {
   assert.equal(f({ cat: 'AI音声生成' }).length, 2);
   assert.equal(f({ q: 'drama3 vram' }).length, 1);
   assert.equal(f({ q: 'tts nonexistent' }).length, 0);
+  assert.equal(f({ q: 'fishaudio' }).length, 2); // meta.pu + primary_subject.name
+  assert.equal(f({ q: 'repository' }).length, 1); // resource_kind
   assert.equal(f({ per: '7' }).length, 6);
   assert.equal(f({ st: 'pending' }).length, 1);
   assert.equal(f({ st: 'archived' }).length, 4);
@@ -71,7 +73,10 @@ test('subject filter + facets + labels', () => {
   const mo = (id) => meta[id];
   assert.deepEqual(DL.filterItems(items, { sub: 'r' }, () => false, mo, 0).map((x) => x.id), ['a']);
   assert.deepEqual(DL.filterItems(items, { sub: '' }, () => false, mo, 0).length, 3);
-  assert.deepEqual(DL.facets(items, mo).subs.map((s) => s.key).sort(), ['m', 'r']);
+  assert.deepEqual(DL.facets(items, mo).subs.map((s) => s.key).sort(), ['-', 'm', 'r']);
+  assert.equal(DL.facets(items, mo).subs.reduce((n, s) => n + s.count, 0), items.length); // sums to the total
+  assert.equal(DL.pkInfo('-')[1], 'なし');
+  assert.deepEqual(DL.filterItems(items, { sub: '-' }, () => false, mo, 0).map((x) => x.id), ['c']);
   assert.equal(DL.subjectLabel('https://github.com/BuilderIO/agent-native/tree/main'), 'BuilderIO/agent-native');
   assert.equal(DL.subjectLabel('https://huggingface.co/datasets/o/d'), 'o/d');
   assert.equal(DL.parseHash(DL.buildHash({ sub: 'r' })).sub, 'r');
@@ -92,8 +97,19 @@ test('relatedView: other people\'s replies get the resource chips they link to',
   assert.equal(v.replies.length, 3);
   assert.deepEqual(v.replies[0].resources.map((r) => r.n), [1]);
   assert.deepEqual(v.replies[1].resources, []);
-  assert.deepEqual(v.replies[2].resources.map((r) => r.n), [1]);
+  assert.deepEqual(v.replies[2].resources, []); // already shown on the first reply: each URL once
   assert.equal(v.counts.replies, 3);
   assert.equal(DL.relatedView(rel).replies.length, 0); // no replies doc
   assert.equal(DL.relatedView({ ...rel, resources: [] }, null, doc).hasContext, true);
+});
+
+test('relatedView: a resource shown as a thread chip is not repeated in replies or "rest"', () => {
+  const rel = {
+    posts: [{ sid: 's', role: 'self', depth: 0, author: '@a', text: 'x' }],
+    resources: [{ n: 1, url: 'https://github.com/o/r', type: 'github', found_in: ['s'] }, { n: 2, url: 'https://x.org/', type: 'web', found_in: [] }, { n: 3, url: 'https://y.org/', type: 'web', found_in: [] }],
+  };
+  const v = DL.relatedView(rel, null, { replies: [{ handle: '@b', text: 't', links: ['https://github.com/o/r', 'https://x.org/'] }] });
+  assert.deepEqual(v.thread[0].resources.map((r) => r.n), [1]);
+  assert.deepEqual(v.replies[0].resources.map((r) => r.n), [2]);
+  assert.deepEqual(v.rest.map((r) => r.n), [3]);
 });

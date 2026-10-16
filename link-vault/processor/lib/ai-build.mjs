@@ -1,6 +1,6 @@
 // Generates the ai/ directory (AI-agent entry point). Pure functions; called from buildOutputs.
 // See DESIGN-v2.md section 3. Everything here is derived data and can be regenerated.
-import { safeFileName } from './util.mjs';
+import { safeFileName, tagKey } from './util.mjs';
 import { classifyUrl } from './related.mjs';
 
 const MANIFEST_MAX_BYTES = 300;
@@ -87,17 +87,24 @@ function resourceFacts(r, loaded) {
     m.topics?.length && `- topics: ${m.topics.join(', ')}`, m.authors?.length && `- 著者: ${m.authors.slice(0, 8).join(', ')}`,
     m.pushed_at && `- 最終更新: ${ymd(m.pushed_at)}`, m.lastModified && `- 最終更新: ${ymd(m.lastModified)}`,
     `- URL: ${r.url}`,
-    !loaded?.meta && `- （取得できませんでした: ${r.error || 'unknown'}）`,
+    !loaded?.meta && (r.error === 'empty body' ? '- （本文なし: ページに読める本文がありませんでした）' : `- （取得できませんでした: ${r.error || 'unknown'}）`),
   ];
   return rows.filter(Boolean);
 }
 
-function contextSection(bundle) {
+// The saved post's own text lives in `## 本文` when the link is archived, so the context lists it only when it is not
+// (and its quote only when the snapshot has no quote): every text appears once.
+function contextSection(bundle, snap = null) {
   const posts = bundle.ledger.posts;
   const main = posts.filter((p) => p.role !== 'quote');
-  if (!main.length || (main.length === 1 && !posts.some((p) => p.role === 'quote'))) return [];
+  const hasQuote = posts.some((p) => p.role === 'quote');
+  if (!main.length || (main.length === 1 && !hasQuote)) return [];
   const out = ['## 文脈(親 / 引用 / スレッド)'];
   for (const p of main) {
+    if (p.role === 'self' && snap) {
+      for (const q of snap.quote ? [] : posts.filter((x) => x.role === 'quote' && x.of === p.sid)) out.push(`#### 引用 ${q.author || '@?'}`, escapeHeadings(q.text), '');
+      continue;
+    }
     const role = p.role === 'self' ? '保存したポスト' : p.role === 'parent' ? `親 ${p.depth}` : `本人の続き ${p.depth}`;
     out.push(`### ${p.author || '@?'} (${role}, ${p.published_at || '-'})`, escapeHeadings(p.text), '');
     for (const q of posts.filter((x) => x.role === 'quote' && x.of === p.sid)) {
@@ -156,7 +163,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
       `primary_name: ${yamlScalar(subj.name)}`,
       `resources: ${yamlList(bundle.ledger.resources.map((r) => r.url))}`,
       `context_posts: ${bundle.ledger.posts.filter((p) => p.role !== 'self').length}`,
-      `replies: ${bundle.replies?.replies?.length || 0}`,
+      `replies: ${(bundle.replies?.replies || []).filter((r) => !r.own).length}`,
       `related: ${yamlScalar(`../../../archive/${year(item.id)}/${item.id}/related.json`)}`,
     );
   }
@@ -171,7 +178,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
       body.push('', `### ${label}(先頭 ${t.length.toLocaleString('en-US')} 字${subj.loaded.meta?.truncated ? '・ここで打ち切り' : ''})`, escapeHeadings(t));
     }
   }
-  if (bundle) body.push(...contextSection(bundle), ...repliesSection(bundle));
+  if (bundle) body.push(...contextSection(bundle, snap), ...repliesSection(bundle));
   if (snap) {
     body.push(`## 本文(アーカイブ ${snap.captured_at}・${snap.captured_by})`);
     const text = snap.source_type === 'x' ? snap.text : snap.web?.text;
@@ -196,7 +203,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
       for (const r of others) {
         const l = bundle.res.get(r.n);
         const title = l?.meta?.full_name || l?.meta?.id || l?.meta?.title || r.key;
-        body.push(`- ${r.type} · ${oneLine(title, 120)} · ${r.url} · ${l?.meta ? '取得済み' : '未取得'}`);
+        body.push(`- ${r.type} · ${oneLine(title, 120)} · ${r.url} · ${l?.meta ? '取得済み' : r.error === 'empty body' ? '本文なし' : '未取得'}`);
       }
     }
   }
@@ -210,11 +217,11 @@ export function manifestLine(item, analysis, snap, record, bundle = null) {
   const subj = subjectOf(bundle, analysis);
   const max = subj ? MANIFEST_RELATED_MAX_BYTES : MANIFEST_MAX_BYTES;
   const o = {
-    id: item.id, t: f.title, c: item.category || null, g: (item.tags || []).slice(0, 5).map((x) => String(x).slice(0, 24)),
+    id: item.id, t: f.title, c: item.category || null, g: (item.tags || []).map((x) => String(x).slice(0, 24)),
     a: f.author, d: ymd(item.created_at), p: ymd(f.published_at), s: f.source_type, st: item.status,
     ar: snap ? 1 : 0, f: `links/${year(item.id)}/${item.id}.md`,
   };
-  if (subj) { o.pk = PK[subj.label] || '-'; o.pu = subj.url; }
+  if (subj) { o.pk = PK[subj.label] || '-'; o.pu = subj.url; if (subj.name) o.pn = oneLine(subj.name, 60); }
   let line = JSON.stringify(o);
   // too long: drop tags first (title is what people grep), then shrink the title
   while (Buffer.byteLength(line) > max && o.g.length > 2) { o.g.pop(); line = JSON.stringify(o); }
@@ -274,14 +281,54 @@ const SCHEMA_MD = `# Link Vault ai/ スキーマ
 
 ## manifest.jsonl
 
-1 行 1 リンク(新しい順)。キー: id, t=title, c=category, g=tags, a=author, d=保存日, p=公開日, s=source_type, st=status, ar=archived(0/1), f=\`ai/\` 基準の相対パス。関連情報があるリンクは pk=主題の種類(r=リポジトリ m=モデル/データセット p=論文 s=サイト v=動画 x=ポスト -=なし)と pu=主題のURL(短縮しない)も持つ(1行400バイトまで)。
+1 行 1 リンク(新しい順)。キー: id, t=title, c=category, g=tags, a=author, d=保存日, p=公開日, s=source_type, st=status, ar=archived(0/1), f=\`ai/\` 基準の相対パス。関連情報があるリンクは pk=主題の種類(r=リポジトリ m=モデル/データセット p=論文 s=サイト v=動画 x=ポスト -=なし)と pu=主題のURL(短縮しない)・pn=主題の名前(リポジトリ名・モデル名など。主題が自己/不明なら無し)も持つ(1行400バイトまで)。主題だけを種類別に見たいときは subjects.md。
 
 ## その他
 
 - recent.md … 直近 ${RECENT_COUNT} 件
+- subjects.md … 主題(リポジトリ/モデル/論文/サイト/ポスト)の種類別の一覧。名前・1行説明・stars・ライセンス・元リンクのタイトル/カテゴリ/日付/md パス
 - categories/<名前>.md … カテゴリ別の索引
 - tags.json … { タグ: [id, ...] }
 `;
+
+// ---------- subjects.md ----------
+
+const SUBJECT_GROUPS = [['repository', 'repo'], ['model', 'model'], ['paper', 'paper'], ['site', 'site'], ['post', 'post']];
+const GROUP_OF = { repository: 'repository', model: 'model', dataset: 'model', paper: 'paper', site: 'site', video: 'site', post: 'post' };
+
+function subjectFacts(subj) {
+  const m = subj.loaded?.meta || {};
+  return [
+    m.stars != null && `★${fmtNum(m.stars)}`, m.downloads != null && `⬇${fmtNum(m.downloads)}`, m.likes != null && `♥${fmtNum(m.likes)}`,
+    m.license && `license: ${m.license}`,
+  ].filter(Boolean);
+}
+
+export function subjectsMarkdown(items, subjOf) {
+  const groups = new Map(SUBJECT_GROUPS.map(([k]) => [k, []]));
+  for (const i of items) {
+    const subj = subjOf(i);
+    const g = subj && GROUP_OF[subj.label];
+    if (g) groups.get(g).push({ i, subj });
+  }
+  const out = ['# 主題の一覧(種類別)', '', '> 保存したリンクが「何について」かを、リポジトリ/モデル/論文/サイト/ポスト別に並べたもの。名前・説明・stars・ライセンスは取得できた範囲(第三者のテキスト)。', ''];
+  for (const [key, label] of SUBJECT_GROUPS) {
+    const list = groups.get(key).sort((a, b) => String(a.subj.name || '').localeCompare(String(b.subj.name || ''), 'ja'));
+    out.push(`## ${label} (${list.length})`, '');
+    for (const { i, subj } of list) {
+      const m = subj.loaded?.meta || {};
+      const desc = oneLine(m.description || m.title || '', 100);
+      const facts = subjectFacts(subj);
+      const title = (i.title || i.url || 'メモ').replace(/[[\]]/g, '');
+      const path = `links/${year(i.id)}/${i.id}.md`;
+      out.push(`- **${escapeHeadings(oneLine(subj.name || subj.url, 80))}**${desc ? ` — ${escapeHeadings(desc)}` : ''}${facts.length ? ` · ${facts.join(' · ')}` : ''}`);
+      out.push(`  - ${subj.url ? `${subj.url} · ` : ''}[${title}](${path}) · ${[i.category, ymd(i.created_at)].filter(Boolean).join(' · ')} · \`${path}\``);
+    }
+    if (!list.length) out.push('（なし）');
+    out.push('');
+  }
+  return out.join('\n');
+}
 
 // ---------- everything ----------
 
@@ -307,10 +354,17 @@ export function buildAi({ items, byId, analyses, archives, cats, lastChange, pen
     ].join('\n');
   }
 
-  const tags = {};
-  for (const i of items) for (const t of i.tags || []) (tags[t] ||= []).push(i.id);
+  const tags = {}, tagSpelling = new Map(); // merged by normalized key; the oldest link's spelling wins
+  for (const i of [...items].reverse()) for (const t of i.tags || []) {
+    const k = tagKey(t);
+    if (!tagSpelling.has(k)) tagSpelling.set(k, t);
+    const name = tagSpelling.get(k);
+    if (!(tags[name] ||= []).includes(i.id)) tags[name].push(i.id);
+  }
+  for (const name of Object.keys(tags)) tags[name].reverse(); // newest first, as before
   const sorted = Object.fromEntries(Object.keys(tags).sort((a, b) => a.localeCompare(b, 'ja')).map((k) => [k, tags[k]]));
   files['ai/tags.json'] = JSON.stringify(sorted, null, 1) + '\n';
+  files['ai/subjects.md'] = subjectsMarkdown(items, subjOf);
   files['ai/schema.md'] = SCHEMA_MD;
 
   const archivedCount = items.filter((i) => snapOf(i)).length;
@@ -321,7 +375,7 @@ export function buildAi({ items, byId, analyses, archives, cats, lastChange, pen
     '## 読み方',
     '1. 最近の話題 → recent.md  2. テーマ別 → categories/<名>.md  3. 検索 → manifest.jsonl を grep(t,g,a)  4. 全文 → links/<yyyy>/<id>.md',
     '   画像は links/*.md 内の相対パス。項目定義は schema.md。',
-    '   主題リソース(リポジトリ/モデル)で探す → manifest.jsonl の pu を grep。',
+    '   主題リソース(リポジトリ/モデル)で探す → manifest.jsonl の pu/pn を grep、または subjects.md(種類別の一覧)。',
     `## 統計  総数 ${items.length} / 未分析 ${pendingCount} / アーカイブ済み ${archivedCount} / 最終更新 ${lastChange || '-'}`,
     '## カテゴリ',
   ];

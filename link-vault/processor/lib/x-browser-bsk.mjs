@@ -68,6 +68,9 @@ const login=!!document.querySelector('[data-testid="loginButton"],[data-testid="
 return JSON.stringify({href:location.href,login,posts});
 })()`;
 
+// "さらに表示" (show more) cuts long posts: click every one so the full text is in the DOM before EXTRACT_JS reads it.
+export const EXPAND_JS = `(()=>{let n=0;for(const b of document.querySelectorAll('[data-testid="tweet-text-show-more-link"]')){try{b.click();n++}catch{}}return n})()`;
+
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // extracted posts -> HTML in the shape parseArticle() reads (so the pure parser and its fixtures stay the single source)
@@ -93,6 +96,10 @@ export async function bskDriver() {
       try {
         await bsk(['navigate', '--session', sid, '--wait-until', 'domcontentloaded', url]);
         const snap = async () => {
+          try {
+            const e = await json(['evaluate', '--session', sid, EXPAND_JS]);
+            if (Number(e.value) > 0) await new Promise((r) => setTimeout(r, 600));
+          } catch {}
           const r = await json(['evaluate', '--session', sid, EXTRACT_JS]);
           const d = JSON.parse(String(r.value ?? '{"href":"","login":false,"posts":[]}'));
           return { href: d.href, html: postsToHtml(d), n: d.posts.length, login: d.login };

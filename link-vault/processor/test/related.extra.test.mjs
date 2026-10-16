@@ -179,3 +179,16 @@ test('e2e: captured replies reach the analysis prompt and ai/links md; --reanaly
     assert.equal((await calls()).length, 1, 'not again');
   } finally { await t.cleanup(); }
 });
+
+test('fetchWeb: an empty body is ok:false "empty body" (shown as 本文なし), a page with text is fine', async () => {
+  const { fetchWeb, fetchResource } = await import('../lib/related.mjs');
+  const real = globalThis.fetch;
+  const page = (html) => async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+  try {
+    globalThis.fetch = page('<html><head><title>App</title></head><body><script>boot()</script></body></html>');
+    await assert.rejects(fetchWeb({ url: 'https://spa.example.com/', type: 'web', key: 'spa.example.com' }), /empty body/);
+    globalThis.fetch = page('<html><head><title>Doc</title></head><body><main>hello world</main></body></html>');
+    const ok = await fetchResource({ url: 'https://doc.example.com/', type: 'web', key: 'doc.example.com' });
+    assert.equal(ok.body.trim(), 'hello world');
+  } finally { globalThis.fetch = real; }
+});

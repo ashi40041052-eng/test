@@ -251,10 +251,11 @@
   function resName(r, m) { return (m && (m.full_name || m.id || m.title)) || r.key || shortUrl(r.url); }
   // v3.1 supplements carry an origin: the author's profile website or a link found in other people's replies (x search)
   function originLabel(r) { return !r.origin ? '' : r.origin === "x_replies" ? "他人のリプ" : r.origin === "x_replies_self" ? "本人のリプ" : r.origin.indexOf('profile:') === 0 ? 'プロフィール ' + r.origin.slice(8) : r.origin; }
+  function noBody(r) { return r.ok === false && r.error === 'empty body'; }
   function miniRes(r) {
     const pi = DL.pkInfo(r.pk);
     const o = originLabel(r);
-    return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer"' + (o ? ' title="' + esc(o) + '"' : '') + '>' + (pi ? pi[0] + ' ' : '') + esc(r.key || shortUrl(r.url)) + (o ? ' <span class="muted">(' + esc(o) + ')</span>' : '') + '</a>';
+    return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer"' + (o ? ' title="' + esc(o) + '"' : '') + '>' + (pi ? pi[0] + ' ' : '') + esc(r.key || shortUrl(r.url)) + (o ? ' <span class="muted">(' + esc(o) + ')</span>' : '') + (noBody(r) ? ' <span class="muted">(本文なし)</span>' : '') + '</a>';
   }
   function postHtml(p, nested) {
     const roleLabel = { parent: '親', self: '保存ポスト', self_reply: '本人の続き', quote: '引用' }[p.role] || p.role;
@@ -285,7 +286,7 @@
       const m = r.meta ? await read(dir + r.meta, 'json').catch(() => null) : null;
       if (state.sel !== id || !$('#subjBox')) return;
       const pi = DL.pkInfo(r.pk);
-      sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">' + (pi ? pi[0] + ' ' : '') + esc(r.type) + '</span> <span class="sc-name">' + esc(resName(r, m)) + '</span></div>' +
+      sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">' + (pi ? pi[0] + ' ' : '') + esc(r.type) + '</span> <span class="sc-name">' + esc(resName(r, m)) + '</span>' + (noBody(r) ? ' <span class="muted">(本文なし)</span>' : '') + '</div>' +
         ((m && m.description) ? '<div class="sc-desc">' + esc(m.description) + '</div>' : '') +
         (resFacts(r, m) ? '<div class="sc-facts">' + esc(resFacts(r, m)) + '</div>' : '') +
         '<div class="sc-act"><a href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer">元ページを開く ↗</a></div>' +
@@ -299,7 +300,7 @@
     if (v.replies.length) {
       tb.innerHTML += '<h4>他の人のリプ（' + v.replies.length + '件）</h4><div class="thread">' + v.replies.map(replyHtml).join('') + '</div>';
     }
-    const others = v.resources.filter((r) => !(v.primary && v.primary.resource && v.primary.resource.n === r.n));
+    const others = v.rest;
     if (others.length) tb.innerHTML += '<h4>その他のリソース</h4><div class="tr">' + others.map(miniRes).join(' ') + '</div>';
   }
 

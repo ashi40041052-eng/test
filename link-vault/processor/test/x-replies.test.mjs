@@ -107,3 +107,24 @@ test('bsk driver: extracted posts -> parser-shaped html round-trips (no bsk need
   assert.equal(replies[0].links[0].href, 'https://t.co/AAA');
   assert.equal(detectLoginWall(postsToHtml({ login: true, posts: [] }), 'https://x.com/a'), true);
 });
+
+test('parseThread: parent / self-thread posts (related.json) and posts older than the main post are not replies', () => {
+  const old = art('author', '90', 'parent post').replace('2026-10-01T00:00:00.000Z', '2026-09-30T00:00:00.000Z');
+  const page = `${old}\n${PAGE}`;
+  const { replies } = parseThread([page], '100', ['102']); // 102 = the author's own follow-up already in related.json
+  assert.deepEqual(replies.map((r) => r.sid), ['101', '103']);
+  assert.deepEqual(parseThread([page], '100').replies.map((r) => r.sid), ['101', '102', '103']); // 90 dropped by date alone
+});
+
+test('capture: skipSids keep the thread posts out of x-replies.json', async () => {
+  const d = await env({ loadThread: async () => ({ finalUrl: 'u', snapshots: [PAGE] }) });
+  await captureXReplies({ relatedRoot: d, id: 'i9', statusUrl: 'u', sid: '100', skipSids: ['102'], budget: { xreplies: 1 } });
+  const doc = JSON.parse(await fs.readFile(path.join(d, 'related', 'x-replies.json'), 'utf8'));
+  assert.deepEqual(doc.replies.map((r) => r.n + ':' + r.permalink.split('/').pop()), ['1:101', '2:103']);
+});
+
+test('bsk driver: show-more links are expanded before the text is read', async () => {
+  const { EXPAND_JS } = await import('../lib/x-browser-bsk.mjs');
+  assert.match(EXPAND_JS, /tweet-text-show-more-link/);
+  assert.match(EXPAND_JS, /click\(\)/);
+});

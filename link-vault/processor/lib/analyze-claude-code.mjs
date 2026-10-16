@@ -3,7 +3,7 @@
 // plan's usage limits. Several links are analyzed per call to keep usage low.
 import { spawn, execFileSync } from 'node:child_process';
 import os from 'node:os';
-import { RESULT_PROPERTIES, RESULT_REQUIRED, INSTRUCTIONS, categoryList, linkBlock, cleanResult } from './prompt.mjs';
+import { RESULT_PROPERTIES, RESULT_REQUIRED, INSTRUCTIONS, categoryList, tagList, linkBlock, cleanResult } from './prompt.mjs';
 
 const SCHEMA = {
   type: 'object',
@@ -78,11 +78,14 @@ export function createClaudeCodeAnalyzer({ model, bin = 'claude', batchSize = 5,
   return {
     batchSize,
     // Returns Map<id, result | Error>
-    async analyzeBatch(items, categories, retrying = false) {
+    async analyzeBatch(items, categories, { tags = [], retrying = false } = {}) {
       const prompt = `${INSTRUCTIONS}
 
 既存カテゴリ:
 ${categoryList(categories)}
+
+既存タグ:
+${tagList(tags)}
 
 以下の ${items.length} 件のリンクを分析し、results に1件ずつ（id は <link id> の値をそのまま）入れてください。
 
@@ -121,7 +124,7 @@ ${items.map((it) => linkBlock(it.record, it.content)).join('\n\n')}`;
       }
       // The model sometimes answers for only part of a batch: ask once more for the rest, in a smaller call.
       if (missing.length && missing.length < items.length && !retrying) {
-        for (const [id, r] of await this.analyzeBatch(missing, categories, true)) out.set(id, r);
+        for (const [id, r] of await this.analyzeBatch(missing, categories, { tags, retrying: true })) out.set(id, r);
       } else for (const it of missing) out.set(it.record.id, new Error('result missing in batch response'));
       return out;
     },

@@ -92,14 +92,22 @@ export function visibleLinkUrl(l) {
 }
 
 // snapshots -> { main:{sid,handle,name}|null, replies:[parsed...] } (deduped, document order, main post excluded)
-export function parseThread(snapshots, sid) {
+// skipSids: the thread's own posts already in related.json (parents / self-thread / quotes) are not replies.
+// Posts older than the main post (its ancestors) are dropped too.
+export function parseThread(snapshots, sid, skipSids = []) {
   const seen = new Map();
   for (const html of snapshots) for (const inner of articlesOf(html)) {
     const a = parseArticle(inner);
     if (a && !seen.has(a.sid)) seen.set(a.sid, a);
   }
   const main = seen.get(String(sid)) || null;
-  const replies = [...seen.values()].filter((a) => a.sid !== String(sid));
+  const skip = new Set(skipSids.map(String));
+  const t0 = main?.time ? Date.parse(main.time) : NaN;
+  const replies = [...seen.values()].filter((a) => {
+    if (a.sid === String(sid) || skip.has(a.sid)) return false;
+    const t = a.time ? Date.parse(a.time) : NaN;
+    return !(Number.isFinite(t0) && Number.isFinite(t) && t < t0);
+  });
   return { main, replies };
 }
 
@@ -167,7 +175,7 @@ export function xrepliesTrigger() {
  *     replies:[{ n, handle, name, text, time, permalink, own:bool, links:[url] }],   // max 30, other people's replies + the author's own
  *     urls:[{ url, own, count }] }                                                           // unique outbound links, own = author's own reply, count = replies containing it
  */
-export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget, now = new Date(), log = () => {} }) {
+export async function captureXReplies({ relatedRoot, id, statusUrl, sid, skipSids = [], budget, now = new Date(), log = () => {} }) {
   const file = path.join(relatedRoot, 'related', 'x-replies.json');
   const attFile = path.join(relatedRoot, 'related', 'x-replies-attempts.json');
   const existing = await readJson(file, null);
@@ -191,7 +199,7 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget,
     const page = locked.value;
     const all = page.snapshots.join('\n');
     if (detectLoginWall(all, page.finalUrl)) { await noteLoginRequired(now, log); return { status: 'login_required', urls: [] }; }
-    const { main, replies } = parseThread(page.snapshots, sid);
+    const { main, replies } = parseThread(page.snapshots, sid, skipSids);
     const mainHandle = (main?.handle || '').toLowerCase();
     const picked = replies.slice(0, MAX_REPLIES);
     const out = [];

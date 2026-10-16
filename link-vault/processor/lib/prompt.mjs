@@ -30,7 +30,7 @@ export const INSTRUCTIONS = `あなたはユーザーが保存したリンクを
 - key_points: 重要なポイントやアイデア（日本語、最大5個）
 - category: カテゴリ名（下のルール参照）
 - new_category_description: 新カテゴリを作った場合のみ、その説明（1文）。既存カテゴリなら空文字
-- tags: 検索用タグ（3〜8個、短い語）
+- tags: 検索用タグ（3〜8個、短い語）。「既存タグ」に同じ意味のものがあれば、表記を一字一句そのまま使う(Drama 3 / Drama3 のような表記ゆれを作らない)
 - content_type: post / article / video / tool / repository / paper / product / news / other
 - language: 元コンテンツの言語コード（ja, en など）
 - primary_subject: ユーザーが保存した本当の理由(主題)。kind は resource(ポストが指すリポジトリ・モデル・論文・サイト等) / post(引用元など別のポスト) / self(保存したポスト自身)。url は主題のURL(self なら null)、name は主題の名前(リポジトリ名・モデル名・論文名など)
@@ -57,6 +57,11 @@ export function categoryList(categories) {
     : '（まだありません。内容に合うカテゴリを新しく作ってください）';
 }
 
+// Existing tags (most used first) so the model reuses a spelling instead of inventing "Drama 3" next to "Drama3".
+export function tagList(tags, max = 120) {
+  return tags && tags.length ? tags.slice(0, max).join(', ') : '（まだありません）';
+}
+
 export const MAX_LINK_CHARS = 20_000;
 const clip = (t, n) => { t = String(t ?? '').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
 
@@ -72,7 +77,7 @@ function subjectBlock(rel, readmeChars) {
       m.stars != null && `stars: ${m.stars}`, m.downloads != null && `downloads: ${m.downloads}`, m.likes != null && `likes: ${m.likes}`,
       m.pipeline_tag && `pipeline: ${m.pipeline_tag}`, m.language && `言語: ${m.language}`, m.license && `ライセンス: ${m.license}`,
       m.topics?.length && `topics: ${m.topics.join(', ')}`, m.authors?.length && `著者: ${m.authors.slice(0, 6).join(', ')}`,
-      !r.ok && `（取得できませんでした: ${r.error || 'unknown'}）`,
+      !r.ok && (r.error === 'empty body' ? '（本文なし）' : `（取得できませんでした: ${r.error || 'unknown'}）`),
     ].filter(Boolean).join('\n');
     const text = r.text ? `\n本文(先頭):\n${clip(r.text, readmeChars)}` : '';
     return `<subject type="${r.type}" url="${r.url}" reason="${String(p.reason || '').replace(/"/g, "'")}">\n${facts}${text}\n</subject>`;

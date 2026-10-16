@@ -26,7 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { normalizeUrl, walkJson, readJson, writeIfChanged } from './lib/util.mjs';
+import { normalizeUrl, walkJson, tagKey, readJson, writeIfChanged } from './lib/util.mjs';
 import { archiveLink, backfillMedia, loadArchives, loadContent, readSnapshot, dirSize, DEFAULT_LIMITS } from './lib/archive.mjs';
 import { buildOutputs } from './lib/build.mjs';
 import { captureRelated, newRelatedBudget, loadRelated } from './lib/related.mjs';
@@ -174,6 +174,13 @@ const releaseLock = () => { try { fssync.unlinkSync(lockFile); } catch {} };
 // ---------- data ----------
 
 const SEED_CATEGORIES = [];
+
+// tags already in use, most frequent first (spelling variants of one tag count together under the first spelling)
+function existingTags(analyses) {
+  const n = new Map(), first = new Map();
+  for (const a of analyses.values()) for (const t of a?.tags || []) { const k = tagKey(t); if (!first.has(k)) first.set(k, t); n.set(k, (n.get(k) || 0) + 1); }
+  return [...n].sort((x, y) => y[1] - x[1]).map(([k]) => first.get(k));
+}
 
 async function ensureLayout(dir) {
   await fs.mkdir(path.join(dir, 'links'), { recursive: true });
@@ -390,7 +397,7 @@ async function main() {
         const batch = [];
         for (const r of queue.slice(i, i + analyzer.batchSize)) batch.push({ record: r, content: await loadContent(dir, r) });
         // Categories are updated between batches so later batches reuse new ones.
-        const results = await analyzer.analyzeBatch(batch, categories);
+        const results = await analyzer.analyzeBatch(batch, categories, { tags: existingTags(analyses) });
         for (const { record: r, content } of batch) {
           const prev = analyses.get(r.id);
           try {
