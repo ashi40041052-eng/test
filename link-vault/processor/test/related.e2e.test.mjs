@@ -66,7 +66,11 @@ async function fakeWorld() {
       return send(JSON.stringify(m[2] ? readme : repo));
     }
     if ((m = u.match(/^\/hf\/api\/(models|datasets|spaces)\/(.+)$/))) { hits.hf.push(m[2]); return send(hfModel); }
-    if (u.match(/^\/hf\/.*\/raw\/main\/README\.md$/)) return send(hfReadme, 'text/markdown');
+    if (u.match(/^\/hf\/.*\/raw\/main\/README\.md$/)) {
+      if (u.includes('/black-forest-labs/')) return send('', 'text/plain', 401); // gated repo: raw files need a login
+      return send(hfReadme, 'text/markdown');
+    }
+    if ((m = u.match(/^\/hf\/black-forest-labs\/([^/?]+)$/))) { hits.hfPage = (hits.hfPage || 0) + 1; return send('<html><head><title>bfl/' + m[1] + '</title></head><body><main><p>You need to agree to share your contact information to access this model</p><h1>FLUX 3 Image Klein</h1>' + '<p>Gated model card text. </p>'.repeat(30) + '</main></body></html>', 'text/html'); }
     if (u.startsWith('/arxiv/api/query')) {
       hits.arxiv.push(u); hits.arxivAt.push(Date.now());
       return send(atom, 'application/atom+xml');
@@ -133,6 +137,12 @@ test('related capture: graph, resources, primary, idempotent, truncation, arxiv 
     assert.equal(a.primary.kind, 'resource');
     assert.equal(a.resources[0].type, 'hf');
     assert.equal(a.resources.length, 2);
+    // gated HF repo: raw README is 401, so the model card text comes from the public page
+    assert.ok(a.resources.every((r) => r.ok && r.text), JSON.stringify(a.resources));
+    const gated = await rj(dir, IDS.a27.id, a.resources[0].meta);
+    assert.equal(gated.body_source, 'page');
+    assert.match(await fs.readFile(path.join(dir, 'archive/2026', IDS.a27.id, a.resources[0].text), 'utf8'), /Gated model card text/);
+    assert.equal((await rj(dir, IDS.a4a.id, (await rj(dir, IDS.a4a.id, 'related.json')).resources[0].meta)).body_source, 'readme');
     const hfMeta = await rj(dir, IDS.a4a.id, (await rj(dir, IDS.a4a.id, 'related.json')).resources[0].meta);
     assert.ok(hfMeta.downloads >= 0);
     assert.deepEqual((await rj(dir, IDS.self.id, 'related.json')).primary.kind, 'self');
@@ -233,6 +243,11 @@ test('analysis uses the subject; --reanalyze-related redoes only links that lack
     assert.match(md, /primary_name: BuilderIO\/agent-native/);
     const man = (await fs.readFile(path.join(dir, 'ai/manifest.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
     assert.equal(man.find((m) => m.id === IDS.c07.id).pk, 'r');
+    // index.json carries the AI's subject (the dashboard reads items[].primary_subject)
+    const idx = JSON.parse(await fs.readFile(path.join(dir, 'index.json'), 'utf8'));
+    assert.deepEqual(idx.items.find((i) => i.id === IDS.c07.id).primary_subject, a.primary_subject);
+    assert.equal(idx.items.find((i) => i.id === IDS.c07.id).resource_kind, 'repository');
+    assert.equal(idx.items.find((i) => i.id === IDS.self.id).primary_subject.kind, 'self');
 
     // nothing to re-analyze while both have primary_subject
     await proc('--reanalyze-related');

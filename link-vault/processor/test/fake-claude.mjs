@@ -14,10 +14,11 @@ process.stdin.on('end', () => {
   const ids = [...input.matchAll(/<link id="([^"]+)">/g)].map((m) => m[1]);
   // v3: if a <subject> precedes the link's content, answer with it as the primary subject
   const blocks = input.split('<link id="').slice(1);
-  const results = ids.map((id, i) => ({
-    primary_subject: (() => { const m = blocks[i].match(/<subject type="(\w+)" url="([^"]*)"[^>]*>\n名前: ([^\n]*)/); return m && m[1] !== 'post' ? { kind: 'resource', url: m[2], name: m[3] } : { kind: 'self', url: null, name: '' }; })(),
-    resource_kind: /<subject type="github"/.test(blocks[i]) ? 'repository' : 'none',
-    id, title: `見出し${i}`, summary: '要約', key_points: ['p'], category: 'AI活用',
+  // Test hook: FAKE_CLAUDE_DROP=<id> leaves that link out of the answer when it is batched with others.
+  const results = ids.filter((id) => !(process.env.FAKE_CLAUDE_DROP === id && ids.length > 1)).map((id) => ({
+    primary_subject: (() => { const m = blocks[ids.indexOf(id)].match(/<subject type="(\w+)" url="([^"]*)"[^>]*>\n名前: ([^\n]*)/); return m && m[1] !== 'post' ? { kind: 'resource', url: m[2], name: m[3] } : { kind: 'self', url: null, name: '' }; })(),
+    resource_kind: /<subject type="github"/.test(blocks[ids.indexOf(id)]) ? 'repository' : 'none',
+    id, title: `見出し${ids.indexOf(id)}`, summary: '要約', key_points: ['p'], category: 'AI活用',
     new_category_description: 'AIの使い方', tags: ['ai'], content_type: 'article', language: 'ja',
   }));
   const out = Buffer.from(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: '', structured_output: { results }, modelUsage: { 'claude-opus-5-5': {} } }));

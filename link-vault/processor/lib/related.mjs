@@ -313,9 +313,16 @@ async function fetchHf(res) {
     id: j.id || res.key, kind, pipeline_tag: j.pipeline_tag, tags: j.tags, downloads: j.downloads, likes: j.likes,
     lastModified: j.lastModified, gated: j.gated ?? false, license: j.cardData?.license ?? null, library_name: j.library_name,
   });
-  let body = null;
-  try { body = await getText(`${hfBase()}/${prefix}${res.key}/raw/main/README.md`); } catch (e) { if (![401, 403, 404].includes(e.status)) throw e; }
-  return { meta, body, limit: LIMITS.resourceTextChars };
+  let body = null, bodySource;
+  try { body = await getText(`${hfBase()}/${prefix}${res.key}/raw/main/README.md`); bodySource = 'readme'; } catch (e) { if (![401, 403, 404].includes(e.status)) throw e; }
+  // Gated repos answer 401 for raw files, but the model card is still rendered on the public page: keep that text.
+  if (body == null) {
+    try {
+      const g = await fetchGeneric(`${hfBase()}/${prefix}${res.key}`, LIMITS.resourceTextChars);
+      if (g.source_type === 'web' && g.text && g.text.length > 200) { body = g.text; bodySource = 'page'; }
+    } catch {}
+  }
+  return { meta: clean({ ...meta, body_source: bodySource }), body, limit: LIMITS.resourceTextChars };
 }
 
 let lastArxivAt = 0;

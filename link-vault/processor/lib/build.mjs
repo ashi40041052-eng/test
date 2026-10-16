@@ -45,6 +45,9 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
         author: a.source?.author || null,
         analyzed_at: a.analyzed_at,
       });
+      // v3: what the link was saved for (the dashboard shows it ahead of the rule-based primary in related.json)
+      if (a.primary_subject?.kind) item.primary_subject = a.primary_subject;
+      if (a.resource_kind && a.resource_kind !== 'none') item.resource_kind = a.resource_kind;
     }
     items.push(item);
   }

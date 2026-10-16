@@ -78,7 +78,7 @@ export function createClaudeCodeAnalyzer({ model, bin = 'claude', batchSize = 5,
   return {
     batchSize,
     // Returns Map<id, result | Error>
-    async analyzeBatch(items, categories) {
+    async analyzeBatch(items, categories, retrying = false) {
       const prompt = `${INSTRUCTIONS}
 
 既存カテゴリ:
@@ -113,10 +113,16 @@ ${items.map((it) => linkBlock(it.record, it.content)).join('\n\n')}`;
         return out;
       }
       const byId = new Map((parsed.results || []).map((r) => [r.id, r]));
+      const missing = [];
       for (const it of items) {
         const r = byId.get(it.record.id);
-        out.set(it.record.id, r ? { ...cleanResult(r), model: parsed.model } : new Error('result missing in batch response'));
+        if (r) out.set(it.record.id, { ...cleanResult(r), model: parsed.model });
+        else missing.push(it);
       }
+      // The model sometimes answers for only part of a batch: ask once more for the rest, in a smaller call.
+      if (missing.length && missing.length < items.length && !retrying) {
+        for (const [id, r] of await this.analyzeBatch(missing, categories, true)) out.set(id, r);
+      } else for (const it of missing) out.set(it.record.id, new Error('result missing in batch response'));
       return out;
     },
   };

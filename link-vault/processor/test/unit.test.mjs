@@ -73,3 +73,19 @@ test('extractFromHtml keeps apostrophes inside double-quoted meta values', () =>
   assert.equal(r.title, "Here's how we built it");
   assert.equal(r.description, 'Say "hi"');
 });
+
+test('claude-code analyzer: a link missing from a batch answer is asked again on its own', async () => {
+  const { createClaudeCodeAnalyzer } = await import('../lib/analyze-claude-code.mjs');
+  const { fileURLToPath } = await import('node:url');
+  const path = await import('node:path');
+  const bin = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fake-claude.mjs');
+  const an = createClaudeCodeAnalyzer({ model: 'opus', bin });
+  const items = ['20261016-000001-aaaaaaaa', '20261016-000002-bbbbbbbb'].map((id) => ({ record: { id, url: `https://x.com/u/status/${id.slice(-8)}`, created_at: '2026-10-16T00:00:00Z' }, content: { ok: true, source_type: 'x', text: 'hello' } }));
+  process.env.FAKE_CLAUDE_DROP = items[1].record.id;
+  try {
+    const res = await an.analyzeBatch(items, []);
+    assert.equal(res.get(items[0].record.id).title, '見出し0');
+    assert.equal(res.get(items[1].record.id).title, '見出し0', 'retried alone and answered');
+    assert.ok(!(res.get(items[1].record.id) instanceof Error));
+  } finally { delete process.env.FAKE_CLAUDE_DROP; }
+});

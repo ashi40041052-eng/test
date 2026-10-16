@@ -151,7 +151,8 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
     body.push('## 主題リソース', ...resourceFacts(subj.res, subj.loaded));
     if (subj.loaded?.text) {
       const t = subj.loaded.text;
-      body.push('', `### README(先頭 ${t.length.toLocaleString('en-US')} 字${subj.loaded.meta?.truncated ? '・ここで打ち切り' : ''})`, escapeHeadings(t));
+      const label = subj.loaded.meta?.body_source === 'page' ? 'モデルカード(公開ページの本文)' : 'README';
+      body.push('', `### ${label}(先頭 ${t.length.toLocaleString('en-US')} 字${subj.loaded.meta?.truncated ? '・ここで打ち切り' : ''})`, escapeHeadings(t));
     }
   }
   if (bundle) body.push(...contextSection(bundle));

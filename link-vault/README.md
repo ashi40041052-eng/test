@@ -218,7 +218,7 @@ link-vault-data/
                                                        thread.json=スマホが置いた /2/thread（あれば processor はこれを使う）
 ```
 
-**related（v3、`DESIGN-v3.md`）**: X のポストは、それが指すもの（GitHub/HF/論文/サイト）のために保存される、という前提で、processor が archive の直後に `related.json` を作ります。`/2/thread` から親（3段まで）・引用（1段）・本人の続きのリプ（5件まで）を取り、その中の URL（t.co 展開済み・重複除去・1リンク8件まで）を種類別に取得します（GitHub=repo メタ+README、HF=モデルカード、arXiv=abstract（3秒間隔・1回20件）、YouTube=oembed、その他=本文）。主題（`primary`）は URL の位置で点数化して決め、AI の `primary_subject` と両方を記録します（`ai/` では AI 側を優先）。`related.json` は再取得しません。やり直したいときは `archive/<年>/<id>/` の `related*` を手で消してください。取得に失敗したリソースは次の実行で最大5回、以後1日1回再試行します。他人の返信は取得しません。GitHub は `gh auth token` があれば使います（無くても動きます）。
+**related（v3、`DESIGN-v3.md`）**: X のポストは、それが指すもの（GitHub/HF/論文/サイト）のために保存される、という前提で、processor が archive の直後に `related.json` を作ります。`/2/thread` から親（3段まで）・引用（1段）・本人の続きのリプ（5件まで）を取り、その中の URL（t.co 展開済み・重複除去・1リンク8件まで）を種類別に取得します（GitHub=repo メタ+README、HF=モデルカード（gated で raw README が 401 のときは公開ページの本文を保存し `body_source: page` と記録）、arXiv=abstract（3秒間隔・1回20件）、YouTube=oembed、その他=本文）。主題（`primary`）は URL の位置で点数化して決め、AI の `primary_subject` と両方を記録します（`ai/` では AI 側を優先）。`index.json` の各項目にも `primary_subject` / `resource_kind` を入れます（ダッシュボードが AI の主題を優先表示）。AI がバッチの一部にしか答えなかったリンクは、同じ実行内で残りだけをもう1回だけ聞き直します。`related.json` は再取得しません。やり直したいときは `archive/<年>/<id>/` の `related*` を手で消してください。取得に失敗したリソースは次の実行で最大5回、以後1日1回再試行します。他人の返信は取得しません。GitHub は `gh auth token` があれば使います（無くても動きます）。
 
 `archive/` は PC の processor（20分ごとの `node process.mjs --archive-only`、AI なし）が埋め、スマホが先に作った分は上書きしません。再取得したいときは、そのリンクの `archive/<年>/<id>/` を手で消してください（分析の再実行では消えません）。画像は1枚5MB・最大8枚、動画は20MBまで1本、1回の実行で合計150MB、archive が2GBを超えたら動画の保存を止めます。fxtwitter で3回連続「見つからない」だと削除済み（`gone`）として週1回だけ再試行します。
 
