@@ -135,7 +135,7 @@ if [ "$OS" = "Darwin" ]; then
     echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
     echo '<plist version="1.0"><dict>'
     echo "  <key>Label</key><string>$LABEL</string>"
-    echo "  <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$PROC_DIR/process.mjs</string></array>"
+    echo "  <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$PROC_DIR/run-guarded.mjs</string></array>"
     echo "  <key>WorkingDirectory</key><string>$PROC_DIR</string>"
     echo "  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$RUN_PATH</string></dict>"
     echo "  <key>StandardOutPath</key><string>$PROC_DIR/logs/launchd.log</string>"
@@ -158,7 +158,7 @@ if [ "$OS" = "Darwin" ]; then
     echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
     echo '<plist version="1.0"><dict>'
     echo "  <key>Label</key><string>$ALABEL</string>"
-    echo "  <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$PROC_DIR/process.mjs</string><string>--archive-only</string></array>"
+    echo "  <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$PROC_DIR/run-guarded.mjs</string><string>--archive-only</string></array>"
     echo "  <key>WorkingDirectory</key><string>$PROC_DIR</string>"
     echo "  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$RUN_PATH</string></dict>"
     echo "  <key>StandardOutPath</key><string>$PROC_DIR/logs/launchd-archive.log</string>"
@@ -193,10 +193,10 @@ if [ "$OS" = "Darwin" ]; then
 else
   have crontab || fail "crontab がありません。cron をインストールしてから再実行してください"
   MARK="# link-vault-processor"
-  LINE="0 ${HOURS// /,} * * * cd \"$PROC_DIR\" && PATH=\"$RUN_PATH\" \"$NODE_BIN\" process.mjs >> \"$PROC_DIR/logs/cron.log\" 2>&1 $MARK"
+  LINE="0 ${HOURS// /,} * * * cd \"$PROC_DIR\" && PATH=\"$RUN_PATH\" \"$NODE_BIN\" run-guarded.mjs >> \"$PROC_DIR/logs/cron.log\" 2>&1 $MARK"
   mkdir -p "$PROC_DIR/logs"
   AMARK="# link-vault-archive"
-  ALINE="*/20 * * * * cd \"$PROC_DIR\" && PATH=\"$RUN_PATH\" \"$NODE_BIN\" process.mjs --archive-only >> \"$PROC_DIR/logs/cron-archive.log\" 2>&1 $AMARK"
+  ALINE="*/20 * * * * cd \"$PROC_DIR\" && PATH=\"$RUN_PATH\" \"$NODE_BIN\" run-guarded.mjs --archive-only >> \"$PROC_DIR/logs/cron-archive.log\" 2>&1 $AMARK"
   { crontab -l 2>/dev/null | grep -v "$MARK" | grep -v "$AMARK" || true; echo "$LINE"; echo "$ALINE"; } | crontab -
   info "cron に登録しました（分析は1日の指定時刻、保存は20分ごと）"
 fi

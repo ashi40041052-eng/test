@@ -105,6 +105,12 @@
     return (th.length > 1 || th.some((p) => p.quote)) && th.some((p) => p.role === 'self' && p.text);
   }
 
+  // true when the rendered thread already shows a quoted post (the archive section must not repeat it as 引用元)
+  function threadShowsQuote(view) {
+    const th = (view && view.thread) || [];
+    return (th.length > 1 || th.some((p) => p.quote)) && th.some((p) => p.quote);
+  }
+
   // First locally stored photo of a snapshot, or null. Media files are in <archiveDir>/media/.
   function firstLocalMedia(snap) {
     const m = ((snap && snap.media) || []).find((x) => x.local && x.type === 'photo');
@@ -185,5 +191,5 @@
     return { thread, resources, rest, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
   }
 
-  g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost };
+  g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost, threadShowsQuote };
 })(typeof self !== 'undefined' ? self : globalThis);

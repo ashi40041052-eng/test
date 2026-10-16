@@ -134,3 +134,11 @@ test('xrStatusText', () => {
   assert.match(DL.xrStatusText({ state: 'ok', at: '2026-10-17T03:00:00Z' }), /^リプ取得: 正常 10\/17 /);
   assert.match(DL.xrStatusText({ state: 'skip', reason: 'login required', last_ok_at: '2026-10-16T03:00:00Z' }), /^リプ取得: スキップ \(login required\) · 最終成功 10\/16 /);
 });
+
+test('threadShowsQuote: the archive 引用元 is dropped only when the thread already renders the quote', () => {
+  const self = { role: 'self', text: 's' };
+  assert.equal(DL.threadShowsQuote({ thread: [Object.assign({ quote: { text: 'q' } }, self)] }), true);
+  assert.equal(DL.threadShowsQuote({ thread: [{ role: 'parent', text: 'p' }, self] }), false);
+  assert.equal(DL.threadShowsQuote({ thread: [self] }), false);
+  assert.equal(DL.threadShowsQuote(null), false);
+});
