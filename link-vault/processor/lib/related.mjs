@@ -70,7 +70,7 @@ function parseHttp(raw) {
 export function canonicalUrl(raw) {
   const u = parseHttp(raw);
   if (!u) return String(raw || '').trim();
-  const host = u.hostname.toLowerCase().replace(/^(www\.|mobile\.|m\.)/, '');
+  const host = u.hostname.toLowerCase().replace(/^(www\.|mobile\.|m\.)/, '') + (u.port ? `:${u.port}` : '');
   const params = [...u.searchParams.entries()].filter(([k]) => !TRACKING.test(k)).sort(([a], [b]) => a.localeCompare(b));
   const qs = params.length ? '?' + new URLSearchParams(params).toString() : '';
   return `${u.protocol}//${host}${u.pathname.replace(/\/+$/, '')}${qs}`;
@@ -526,4 +526,17 @@ export async function loadRelated(dir, id) {
 export function resourceName(r, loaded) {
   const m = loaded?.meta;
   return m?.full_name || m?.id || m?.title || r.key || r.url;
+}
+
+// Shape used by the analysis prompt: ledger posts + resources with their loaded meta/text.
+export function relatedContent(loaded) {
+  const { ledger, res } = loaded;
+  return {
+    primary: ledger.primary,
+    posts: ledger.posts,
+    resources: ledger.resources.map((r) => {
+      const l = res.get(r.n);
+      return { ...r, name: resourceName(r, l), meta: l?.meta || null, text: l?.text || null };
+    }),
+  };
 }

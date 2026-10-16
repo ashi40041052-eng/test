@@ -42,7 +42,7 @@ test('84c52ab8: github only in the quoted post -> primary github (from the quote
 
 test('4aeb4268: url-only post with a parent; primary = hf', async () => {
   const g = graphFromThread(await fx('fx2-thread-4aeb4268.json'), '2110164449470652678');
-  assert.equal(roles(g), 'parent1,self0');
+  assert.equal(roles(g), 'parent1,self0,quote1');
   assert.equal(g.resources[0].key, 'fishaudio/drama-3');
   assert.equal(g.primary.kind, 'resource');
 });

@@ -355,5 +355,9 @@ export function contentFromSnapshot(s) {
 // Archive first; falls back to a live fetch (v1 behaviour) when there is no snapshot yet.
 export async function loadContent(dir, record) {
   const s = await readSnapshot(dir, record.id);
-  return s ? contentFromSnapshot(s) : fetchContent(record.url);
+  const content = s ? contentFromSnapshot(s) : await fetchContent(record.url);
+  // related.json (parents, quotes, self replies, linked resources) rides along when it exists
+  const { loadRelated, relatedContent } = await import('./related.mjs');
+  const rel = await loadRelated(dir, record.id);
+  return rel ? { ...content, related: relatedContent(rel) } : content;
 }
