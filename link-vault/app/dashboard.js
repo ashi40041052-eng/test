@@ -3,6 +3,15 @@
  * (GitHub Contents API, raw). ?mock=1 reads the same layout from fixtures/mock/ instead. */
 (function () {
   'use strict';
+  function cleanReadme(t) {
+    return String(t || '')
+      .replace(/^---\n[\s\S]*?\n---\n/, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, '[画像: $1]')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
   const LV = self.LV, DL = self.DashLogic;
   const $ = (s) => document.querySelector(s);
   const MOCK = new URLSearchParams(location.search).get('mock') === '1';
@@ -400,7 +409,7 @@
         const d = sum.parentElement;
         if (!d.dataset.loaded) {
           d.dataset.loaded = '1';
-          read(d.dataset.path, 'text').then((t) => { d.querySelector('.body').textContent = t || '(本文なし)'; d.querySelector('.body').classList.remove('muted'); }).catch((err) => { d.querySelector('.body').textContent = err.message; });
+          read(d.dataset.path, 'text').then((t) => { d.querySelector('.body').textContent = cleanReadme(t) || '(本文なし)'; d.querySelector('.body').classList.remove('muted'); }).catch((err) => { d.querySelector('.body').textContent = err.message; });
         }
         return;
       }
