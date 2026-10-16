@@ -125,7 +125,7 @@ step "6/7 試しに1回実行"
 # ---------- 7. schedule ----------
 step "7/7 1日の自動実行を設定（${HOURS// /時・}時）"
 NODE_BIN="$(command -v node)"
-RUN_PATH="$(dirname "$NODE_BIN"):$(dirname "$CLAUDE_BIN"):/usr/bin:/bin:/usr/sbin:/sbin"
+RUN_PATH="$(dirname "$NODE_BIN"):$(dirname "$CLAUDE_BIN"):$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin" # ~/.local/bin: bsk(browser-skill)
 if [ "$OS" = "Darwin" ]; then
   LABEL="com.linkvault.processor"
   PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"

@@ -2,9 +2,18 @@
 // in a background Agent Window. No login of our own, no cookie is read or printed. Never imported by tests.
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const run = promisify(execFile);
-const bin = () => process.env.LV_BSK_BIN || 'bsk';
+// launchd/cron PATH often lacks ~/.local/bin (where the bsk installer puts the CLI): fall back to it explicitly
+const bin = () => {
+  if (process.env.LV_BSK_BIN) return process.env.LV_BSK_BIN;
+  const local = path.join(os.homedir(), '.local', 'bin', 'bsk');
+  const onPath = (process.env.PATH || '').split(path.delimiter).some((d) => d && fs.existsSync(path.join(d, 'bsk')));
+  return !onPath && fs.existsSync(local) ? local : 'bsk';
+};
 
 // -> { ok, reason }  (bsk installed, daemon up, at least one browser connected)
 export function bskStatus() {

@@ -20,12 +20,14 @@ const DAY_MS = 24 * 3600 * 1000;
 export const MAX_REPLIES = 30;
 export const MAX_URLS = 8;
 const MAX_ATTEMPTS = 3;
+const MAX_HEADS = 12; // t.co HEAD resolves per capture
 
 const loginFile = () => process.env.LV_XREPLIES_LOGIN_FILE || path.join(HERE, '..', 'logs', 'x-login-required.json');
 const lockFile = () => process.env.LV_XREPLIES_LOCK_FILE || path.join(HERE, '..', 'logs', 'x-browser.lock');
 export const perRun = () => Number(process.env.LV_XREPLIES_PER_RUN ?? 4);
 
 let driver = null; // tests inject one; production lazily builds the bsk driver
+let driverUnavailable = ''; // reason bsk could not be used earlier in this process (checked once per run, logged once)
 export const setXrepliesDriver = (d) => { driver = d; };
 let resolver = null; // t.co -> final url (HEAD, no browser); injectable
 export const setXrepliesResolver = (f) => { resolver = f; };
@@ -110,11 +112,12 @@ async function headResolve(url) {
   } catch { return ''; }
 }
 
-export async function resolveLinks(links) {
+// heads: shared per-capture cap on t.co HEAD requests (each may wait up to 8 s) so one thread cannot stall the run
+export async function resolveLinks(links, heads = { left: MAX_HEADS }) {
   const out = [];
   for (const l of links) {
     let u = visibleLinkUrl(l);
-    if (!u) u = await headResolve(l.href);
+    if (!u && heads.left > 0) { heads.left--; u = await headResolve(l.href); }
     if (u && /^https?:\/\//i.test(u) && !out.includes(u)) out.push(u);
   }
   return out;
@@ -185,8 +188,9 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget,
   if (att.count >= MAX_ATTEMPTS) return { status: 'skipped', urls: [] };
   let drv = driver;
   if (!drv) {
+    if (driverUnavailable) return { status: 'skipped', urls: [] };
     try { drv = await (await import('./x-browser-bsk.mjs')).bskDriver(); }
-    catch (e) { log(`x-replies: skipped (${String(e.message).slice(0, 80)})`); return { status: 'skipped', urls: [] }; }
+    catch (e) { driverUnavailable = String(e.message).slice(0, 80); log(`x-replies: skipped for this run (${driverUnavailable})`); return { status: 'skipped', urls: [] }; }
   }
   if (budget) budget.xreplies--;
   try {
@@ -203,9 +207,10 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget,
     const picked = replies.slice(0, MAX_REPLIES);
     const out = [];
     const urls = [];
+    const heads = { left: MAX_HEADS };
     for (const [i, r] of picked.entries()) {
       const own = !!mainHandle && r.handle.toLowerCase() === mainHandle;
-      const links = await resolveLinks(r.links);
+      const links = await resolveLinks(r.links, heads);
       out.push({ n: i + 1, handle: r.handle, name: r.name, text: r.text, time: r.time, permalink: r.permalink, own, links });
       for (const u of links) {
         if (!classifyUrl(u)) continue;
