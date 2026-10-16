@@ -3,8 +3,12 @@
 const UA = 'Mozilla/5.0 (compatible; LinkVault/1.0; +personal link archive)';
 const MAX_BYTES = 3_000_000;
 const MAX_TEXT = 12_000;
+export const MAX_WEB_TEXT = 200_000; // archive keeps far more than the AI prompt sees
 
-async function fetchWithTimeout(url, opts = {}, ms = 15000) {
+// FxTwitter base URL; overridable so tests never touch the network.
+export const fxBase = () => (process.env.LV_FXTWITTER_BASE || 'https://api.fxtwitter.com').replace(/\/+$/, '');
+
+export async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
@@ -14,14 +18,14 @@ async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   }
 }
 
-const X_STATUS = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:([A-Za-z0-9_]{1,15})|i(?:\/web)?)\/status(?:es)?\/(\d+)/i;
+export const X_STATUS = /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/(?:([A-Za-z0-9_]{1,15})|i(?:\/web)?)\/status(?:es)?\/(\d+)/i;
 
 // X/Twitter pages need JS, so use the public FxTwitter API to get the post text.
 async function fetchXPost(url) {
   const m = url.match(X_STATUS);
   if (!m) return null;
   const user = m[1] && m[1].toLowerCase() !== 'i' ? m[1] : 'i';
-  const r = await fetchWithTimeout(`https://api.fxtwitter.com/${user}/status/${m[2]}`, { headers: { Accept: 'application/json' } });
+  const r = await fetchWithTimeout(`${fxBase()}/${user}/status/${m[2]}`, { headers: { Accept: 'application/json' } });
   if (!r.ok) throw new Error(`fxtwitter ${r.status}`);
   const j = await r.json();
   const t = j.tweet;
@@ -63,7 +67,7 @@ function meta(html, key) {
   return m ? decodeEntities(m[1] ?? m[2]).trim() : null;
 }
 
-export function extractFromHtml(html) {
+export function extractFromHtml(html, maxText = MAX_TEXT) {
   const titleTag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const title = meta(html, 'og:title') || (titleTag ? decodeEntities(titleTag[1]).replace(/\s+/g, ' ').trim() : null);
   const description = meta(html, 'og:description') || meta(html, 'description');
@@ -77,7 +81,7 @@ export function extractFromHtml(html) {
       .replace(/<(br|\/p|\/div|\/li|\/h\d)[^>]*>/gi, '\n')
       .replace(/<[^>]+>/g, ' ')
   ).replace(/[ \t\f\v]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
-  return { title, description, author, published_at: published, text: text.slice(0, MAX_TEXT) };
+  return { title, description, author, published_at: published, text: text.slice(0, maxText) };
 }
 
 function charsetOf(contentType, headBytes) {
@@ -88,7 +92,7 @@ function charsetOf(contentType, headBytes) {
   return m2 ? m2[1] : 'utf-8';
 }
 
-async function fetchGeneric(url) {
+export async function fetchGeneric(url, maxText = MAX_TEXT) {
   const r = await fetchWithTimeout(url, { headers: { Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5' } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const type = r.headers.get('content-type') || '';
@@ -98,8 +102,8 @@ async function fetchGeneric(url) {
   const buf = new Uint8Array(await r.arrayBuffer()).subarray(0, MAX_BYTES);
   let html;
   try { html = new TextDecoder(charsetOf(type, buf)).decode(buf); } catch { html = new TextDecoder().decode(buf); }
-  if (/text\/plain/i.test(type)) return { source_type: 'web', title: null, description: null, author: null, published_at: null, text: html.slice(0, MAX_TEXT), final_url: r.url };
-  return { source_type: 'web', ...extractFromHtml(html), final_url: r.url };
+  if (/text\/plain/i.test(type)) return { source_type: 'web', title: null, description: null, author: null, published_at: null, text: html.slice(0, maxText), final_url: r.url };
+  return { source_type: 'web', ...extractFromHtml(html, maxText), final_url: r.url };
 }
 
 export async function fetchContent(url) {

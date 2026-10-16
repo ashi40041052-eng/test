@@ -1,0 +1,33 @@
+{
+ "schema": 1,
+ "id": "20261013-180000-ee55ff66",
+ "url": "https://x.com/indie_hacker/status/ee55ff6600",
+ "canonical_url": "https://x.com/indie_hacker/status/ee55ff6600",
+ "captured_at": "2026-10-16T01:16:20Z",
+ "captured_by": "phone",
+ "source_type": "x",
+ "title": "個人開発の収益化: 最初の100ドルまでにやったこと",
+ "author": {
+  "name": "Indie",
+  "handle": "@indie_hacker",
+  "url": "https://x.com/indie_hacker"
+ },
+ "published_at": "2026-10-13T05:30:12Z",
+ "lang": "ja",
+ "text": "個人開発の収益化: 最初の100ドルまでにやったこと\n\nこれがアーカイブされた本文全文です。改行も保持されます。\n\n1. 手順その1\n2. 手順その2\nhttps://example.com/detail",
+ "html_text": null,
+ "quote": null,
+ "article": null,
+ "replying_to": null,
+ "community_note": null,
+ "media": [],
+ "web": null,
+ "stats": {
+  "likes": 120,
+  "reposts": 14,
+  "views": 5400
+ },
+ "raw": {
+  "fxtwitter": {}
+ }
+}

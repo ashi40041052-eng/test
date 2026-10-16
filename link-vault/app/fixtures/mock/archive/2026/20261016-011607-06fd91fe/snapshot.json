@@ -1,0 +1,55 @@
+{
+ "schema": 1,
+ "id": "20261016-011607-06fd91fe",
+ "url": "https://x.com/pentacoxian_dev/status/06fd91fe00",
+ "canonical_url": "https://x.com/pentacoxian_dev/status/06fd91fe00",
+ "captured_at": "2026-10-16T01:16:20Z",
+ "captured_by": "phone",
+ "source_type": "x",
+ "title": "Fish Audio Drama 3を12GB VRAMで動かす軽量版公開",
+ "author": {
+  "name": "PentaCoxian",
+  "handle": "@pentacoxian_dev",
+  "url": "https://x.com/pentacoxian_dev"
+ },
+ "published_at": "2026-10-16T05:30:12Z",
+ "lang": "ja",
+ "text": "Fish Audio Drama 3を12GB VRAMで動かす軽量版公開\n\nこれがアーカイブされた本文全文です。改行も保持されます。\n\n1. 手順その1\n2. 手順その2\nhttps://example.com/detail",
+ "html_text": null,
+ "quote": {
+  "url": "https://x.com/q/status/1",
+  "author": {
+   "name": "Quoted",
+   "handle": "@quoted",
+   "url": "https://x.com/quoted"
+  },
+  "published_at": "2026-10-14T00:00:00Z",
+  "text": "引用元のポストの本文です。",
+  "media": []
+ },
+ "article": null,
+ "replying_to": null,
+ "community_note": null,
+ "media": [
+  {
+   "n": 1,
+   "type": "photo",
+   "url": "https://pbs.twimg.com/media/20261016-011607-06fd91fe1.jpg",
+   "width": 800,
+   "height": 450,
+   "alt": "画像1の説明",
+   "local": "media/01.svg",
+   "bytes": 900,
+   "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+ ],
+ "web": null,
+ "stats": {
+  "likes": 120,
+  "reposts": 14,
+  "views": 5400
+ },
+ "raw": {
+  "fxtwitter": {}
+ }
+}

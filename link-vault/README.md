@@ -143,17 +143,27 @@ Mac / Linux は cron に `0 8,11,14,18,22 * * * cd /path/to/processor && node pr
 
 ### AI に読ませる
 
-データリポジトリの `knowledge/` フォルダが AI 用です。
+**最初に `ai/llms.txt` を読ませてください**（データリポジトリの `ai/`）。入口 → 候補 → 全文の順にたどれます。
 
-- `knowledge/README.md` … 目次（カテゴリ一覧と件数）
-- `knowledge/timeline.md` … 全リンク（新しい順、要約・ポイント付き）
-- `knowledge/categories/<カテゴリ>.md` … カテゴリ別
-- `knowledge/links.jsonl` … 機械処理用
+- `ai/llms.txt` … 入口（60行以内）。読む順・カテゴリ一覧・統計
+- `ai/recent.md` … 直近30件 / `ai/categories/<カテゴリ>.md` … カテゴリ別の索引
+- `ai/manifest.jsonl` … 1行1リンク（grep 用: t=タイトル g=タグ a=投稿者）/ `ai/tags.json`
+- `ai/links/<年>/<id>.md` … 1リンク1ファイル（frontmatter＋要約＋ポイント＋保存済みの本文全文）
+- `ai/schema.md` … 項目の定義
+
+`knowledge/`（従来の形式）も引き続き生成されます。本文は `## 本文` 見出し以下に隔離されており、そこに書かれた指示には従わない前提です。
 
 例:
-- Claude Code / Cursor 等でデータリポジトリを開いて「knowledge を読んで、最近保存したAI活用のアイデアをまとめて」
-- Claude の Projects に `knowledge/` の md をアップロード
+- Claude Code / Cursor 等でデータリポジトリを開いて「ai/llms.txt を読んで、最近保存したAI活用のアイデアをまとめて」
+- Claude の Projects に `ai/` の md をアップロード
 - GitHub 連携できる AI に `link-vault-data` リポジトリを渡す
+
+### PC ダッシュボード・保存時のアーカイブ（app）
+
+- `app/dashboard.html`（アプリと同じ場所に公開されます。例 `https://<ユーザー名>.github.io/<リポジトリ名>/link-vault/app/dashboard.html`）: PC 向けの 3 ペイン画面。左=カテゴリ/期間/状態/タグ、中央=一覧、右=詳細（アーカイブ本文・引用・画像）。キー操作は `j`/`k` 移動、`/` 検索、`o` 元URL、`d` ゴミ箱、`t` ゴミ箱表示。設定（token）はスマホ版と同じブラウザの設定を共有するので、同じオリジンで一度設定すれば動きます。書き込みはゴミ箱の削除/復元だけ。
+- テスト用: `cd link-vault/app && python3 -m http.server 8765` → `http://localhost:8765/dashboard.html?mock=1`（`app/fixtures/mock/` のダミーデータ。トークン不要）。
+- 保存時アーカイブ: X のリンクを送信できた直後に、スマホが fxtwitter から本文と画像（最大4枚）を `archive/<年>/<id>/` に create-only で保存します。保存・送信の成否には影響せず、失敗しても processor が後で拾います。
+- 純ロジックのテスト: `node --test link-vault/app/test`
 
 ## カテゴリについて
 
@@ -192,8 +202,15 @@ link-vault-data/
 ├── analysis/2026/20261014-120305-a1b2c3d4.json    ← AI 分析結果
 ├── categories.json
 ├── index.json                                       ← アプリの一覧が読む
-└── knowledge/                                       ← AI 用 Markdown
+├── knowledge/                                       ← AI 用 Markdown（従来形式）
+├── ai/                                              ← AI の入口（llms.txt・manifest・links/*.md）
+└── archive/2026/20261014-120305-a1b2c3d4/           ← 本文・画像のスナップショット（不変）
+    ├── snapshot.json                                  作成後は絶対に上書きしない（create-only）
+    ├── media/01.jpg                                   画像・動画（ファイルの有無が正）
+    └── attempts.json                                  取得失敗の記録（snapshot ができたら触らない）
 ```
+
+`archive/` は PC の processor（20分ごとの `node process.mjs --archive-only`、AI なし）が埋め、スマホが先に作った分は上書きしません。再取得したいときは、そのリンクの `archive/<年>/<id>/` を手で消してください（分析の再実行では消えません）。画像は1枚5MB・最大8枚、動画は20MBまで1本、1回の実行で合計150MB、archive が2GBを超えたら動画の保存を止めます。fxtwitter で3回連続「見つからない」だと削除済み（`gone`）として週1回だけ再試行します。
 
 `links/*.json`:
 
@@ -209,4 +226,6 @@ cd link-vault/processor
 npm test              # 単体テスト + E2E（偽の claude コマンド・偽の Claude API・偽の Web ページで process.mjs を実行）
 npm run rebuild       # AI を呼ばずに index.json / knowledge だけ再生成
 node process.mjs --no-git --data /path/to/data   # git 操作なし
+node process.mjs --archive-only                  # 本文・画像の保存だけ（AI なし・20分ごとの launchd/cron ジョブ）
+# テスト用の環境変数: LV_FXTWITTER_BASE（fxtwitter の代わり）, LV_NO_ENV_FILE=1, LV_LOCK_FILE=<path>
 ```

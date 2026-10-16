@@ -8,6 +8,7 @@
   "scripts": {
     "process": "node process.mjs",
     "rebuild": "node process.mjs --no-ai",
+    "archive": "node process.mjs --archive-only",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

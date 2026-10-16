@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Vault ダッシュボード</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <header class="bar">
+    <strong class="brand">Link Vault</strong>
+    <input id="q" type="search" placeholder="検索  ( / )  スペース区切りで AND" autocomplete="off" />
+    <span id="count" class="muted"></span>
+    <span class="grow"></span>
+    <span id="mockBadge" class="pill" hidden>MOCK</span>
+    <button id="refresh" type="button" title="再読み込み (r)">↻</button>
+    <button id="theme" type="button" title="テーマ切替">◐</button>
+  </header>
+
+  <div id="setup" class="setup" hidden>
+    <h2>保存先が未設定です</h2>
+    <p>スマホ版と同じオリジンで設定済みなら自動で読み込みます。<a href="index.html">アプリの「設定」タブ</a>で保存先とトークンを入れてから、このページを開き直してください。</p>
+  </div>
+
+  <div id="layout" class="layout">
+    <aside id="side" class="side" aria-label="フィルタ"></aside>
+    <section id="list" class="list" tabindex="0" aria-label="リンク一覧"></section>
+    <article id="detail" class="detail" aria-live="polite"></article>
+  </div>
+
+  <footer class="keys muted">
+    <kbd>j</kbd>/<kbd>k</kbd> 移動 · <kbd>/</kbd> 検索 · <kbd>o</kbd> 元URL · <kbd>d</kbd> ゴミ箱へ/戻す · <kbd>t</kbd> ゴミ箱表示 · <kbd>Esc</kbd> 検索解除
+  </footer>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="core.js"></script>
+  <script src="dash-logic.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
