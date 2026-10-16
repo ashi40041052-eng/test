@@ -164,3 +164,13 @@ fixture は**実 API の応答を保存して使う**: `test/fixtures/related/fx
 - **プロンプトインジェクション面の拡大**: README・モデルカード・Web 本文は第三者テキスト。`<subject>`/`<context>` も `<content>` と同じ扱いを INSTRUCTIONS に明記。`ai/` 側も見出しで隔離(§6)。
 - **レート制限**: GitHub は認証で回避、arXiv は 3 秒間隔+1 ラン 20 件、HF は無認証で十分。429 は `error` に残して次ランで再試行(related.json は作る)。
 - **バッチ 8→5 件で分析ランの回数が増える**: 1 ラン最大 40 件の既定は変えず、1 回の `claude` 呼び出しのトークンが v2 と同程度に収まることを優先。
+
+## 付録: v3.1 補足取得(プロフィールのサイト・Grok X 検索)
+
+§11 の「他人の返信は取らない」を、**条件付き・枠つき**で緩める。コードは `processor/lib/related-extra.mjs`。どちらも best effort で、失敗してもアーカイブ・分析は止めない。
+
+- **A) プロフィールのサイト(無料)**: 引用/親ポストの投稿者で、そのポストに URL が無いアカウント(動画だけの公式引用など。最大 2 人)について `https://api.fxtwitter.com/<handle>` の `user.website.url` と `raw_description.facets` の URL を候補にする。linktr.ee / lit.link / bento.me / beacons.ai 等のハブなら HTML を取り、アフィリエイト・SNS・フォント等を除いた外向きリンクから**公式ドメイン(アカウント名・表示名に近いホスト)優先**で 1 サイト 1 リンク、最大 3 件。`resources[].origin = "profile:@handle"`、主題スコア **+1**(他に何も無いときだけ勝つ。公式引用ポスト主題=2 には負ける)。
+- **B) 他人のリプ(Grok X 検索、枠つき)**: 発動条件は (1) 保存/親ポスト本文が `リプ|リプライ|コメント欄|返信|👇|below|in replies|link in reply|comments` を含み、かつ本人スレッド(self/self_reply)にリソース URL が無い、または (2) 全部取ったあとリソースが 0 件(プロフィール由来は数えない)で本文がツール/製品の話(`ツール|アプリ|モデル|公開|Introducing|launch|SDK|open source…`)。`grok-api search x --query … --output json --from-date --to-date`(保存日の前日〜+3 日)を実行し、結果中の URL を `origin = "x_search"`(主題スコア +2)で資源にする。生の応答は `related/x-search.json` に **create-only** で保存(1 リンク 1 回。エラー時は `x-search-attempts.json` に記録、3 回失敗で 1 日 1 回)。
+- 枠: 1 ランあたり `LV_XSEARCH_PER_RUN`(既定 3)。応答/終了コードが spending-limit・quota・rate・auth 系なら `processor/logs/xsearch-cooldown.json`(`LV_XSEARCH_COOLDOWN_FILE`)に 24 時間のクールダウンを書き、その間は検索しない。`LV_XSEARCH=0` で無効、`LV_GROK_BIN` でコマンド差し替え(テストは偽バイナリ)、`LV_XSEARCH_FORCE=1` は動作確認用(条件を無視)。`LV_FXTWITTER_BASE` を差し替えているのに `LV_GROK_BIN` が無い環境では実バイナリを絶対に呼ばない。
+- **既存の related.json への追記**: `related.json` は作成時のみ書くが、補足取得だけは**追記専用**で既存台帳を更新する(既存の資源・番号は変えない。新資源は番号を続けて付け、`primary` だけ再計算、`supplement:{v:1,profile_done,xsearch_done}` を記録。tmp+rename)。`supplement` が済んだリンクは再実行しても何も変わらない。
+- 実応答 fixture: `test/fixtures/related/fx-user-MireloAI.json`, `fx-user-bfl_ai.json`, `hub-linktree-mirelo.html`(`record-fixtures.sh` に追記)。テスト: `test/related.extra.test.mjs`。

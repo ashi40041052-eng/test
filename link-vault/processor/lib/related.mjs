@@ -20,6 +20,7 @@ import { execFileSync } from 'node:child_process';
 import { X_STATUS, fxBase, fetchWithTimeout, fetchGeneric } from './fetch-content.mjs';
 import { archivePaths, shouldAttempt, nextAttempts, NotFoundError } from './archive.mjs';
 import { readJson } from './util.mjs';
+import { fetchProfileSites, xsearchTrigger, searchReplies } from './related-extra.mjs';
 
 export const LIMITS = {
   maxParents: 3,
@@ -234,6 +235,9 @@ export function scorePrimary(g) {
     if (roles.has('quote_of_self')) { score += 3; why.push('in the quoted post'); }
     if (roles.has('parent') || [...roles].some((x) => x.startsWith('quote_of_') && x !== 'quote_of_self')) { score += 2; why.push('in a parent post'); }
     if (r.found_in.length > 1) { score += 2; why.push('appears in several posts'); }
+    // supplements (v3.1): the author's profile website only wins when nothing better exists; replies found by search rank like a parent link
+    if (String(r.origin || '').startsWith('profile:')) { score += 1; why.push(`author profile website (${r.origin.slice(8)})`); }
+    if (r.origin === 'x_search') { score += 2; why.push("found in other people's replies (x search)"); }
     return { ...r, score, order, why: why.join('; ') };
   });
   scored.sort((a, b) => b.score - a.score || (TYPE_RANK[a.type] ?? 9) - (TYPE_RANK[b.type] ?? 9) || a.order - b.order);
@@ -437,7 +441,7 @@ async function walkParents(json, rootId, log) {
 
 // ---------- orchestrator ----------
 
-export const newRelatedBudget = () => ({ resources: LIMITS.runResourceBudget, arxiv: LIMITS.runArxivBudget });
+export const newRelatedBudget = () => ({ resources: LIMITS.runResourceBudget, arxiv: LIMITS.runArxivBudget, searches: Number(process.env.LV_XSEARCH_PER_RUN ?? 3) });
 
 async function fetchAll(p, resources, budget, log) {
   const started = Date.now();
@@ -461,6 +465,88 @@ async function fetchAll(p, resources, budget, log) {
   return results;
 }
 
+
+// ---------- supplements: profile website + x search (v3.1) ----------
+
+// -> new resources [{url,type,key,found_in:[],origin,...}] not already in `have`, in order.
+function newFromExtras(have, extras) {
+  const seen = new Set(have.map(dedupeKey));
+  const out = [];
+  for (const { url, origin } of extras) {
+    const c = classifyUrl(url);
+    if (!c || seen.has(dedupeKey(c))) continue;
+    seen.add(dedupeKey(c));
+    out.push({ ...c, found_in: [], origin });
+  }
+  return out;
+}
+
+/*
+ * posts: ledger-style posts; resources: ledger/graph resources; supp: {profile_done, xsearch_done} (mutated).
+ * Returns the extra {url, origin} candidates. Never throws.
+ */
+async function gatherExtras({ p, record, posts, resources, supp, budget, now, log }) {
+  const extras = [];
+  try {
+    if (!supp.profile_done) {
+      const self = posts.find((x) => x.role === 'self');
+      const handles = [...new Set(posts.filter((x) => (x.role === 'quote' || x.role === 'parent') && !x.urls.length && x.author && x.author !== self?.author).map((x) => x.author))].slice(0, 2);
+      let failed = false;
+      for (const h of handles) {
+        const r = await fetchProfileSites(h, log);
+        if (r.status === 'error') failed = true;
+        for (const url of r.urls) extras.push({ url, origin: `profile:${h}` });
+      }
+      if (!failed) supp.profile_done = true;
+    }
+  } catch (e) { log(`profile fallback failed: ${e.message}`); }
+  try {
+    if (!supp.xsearch_done) {
+      const trig = xsearchTrigger(posts, [...resources, ...extras]);
+      if (trig) {
+        const self = posts.find((x) => x.role === 'self');
+        const r = await searchReplies({ relatedRoot: p.root, id: record.id, handle: self?.author, sid: self?.sid, publishedAt: self?.published_at, budget, now, log });
+        if (r.state === 'done') { supp.xsearch_done = true; supp.xsearch_trigger = trig; for (const url of r.urls) extras.push({ url, origin: 'x_search' }); }
+      }
+    }
+  } catch (e) { log(`x search failed: ${e.message}`); }
+  return extras;
+}
+
+async function writeAtomic(file, data) {
+  const tmp = `${file}.tmp-${process.pid}`;
+  await fs.writeFile(tmp, data);
+  await fs.rename(tmp, file);
+}
+
+// Existing related.json: append supplement resources (never change or remove anything already there). true when it changed.
+async function supplementExisting(p, record, budget, now, log) {
+  const ledger = await readJson(p.related, null);
+  if (!ledger?.posts) return false;
+  const supp = { ...(ledger.supplement || {}) };
+  const before = JSON.stringify(supp);
+  const extras = await gatherExtras({ p, record, posts: ledger.posts, resources: ledger.resources || [], supp, budget, now, log });
+  let fresh = newFromExtras(ledger.resources || [], extras).slice(0, Math.max(0, LIMITS.maxResources - (ledger.resources || []).length));
+  if (!fresh.length && JSON.stringify(supp) === before) return false;
+  let n = Math.max(0, ...(ledger.resources || []).map((r) => r.n));
+  fresh = fresh.map((r) => ({ ...r, n: ++n }));
+  const fetched = fresh.length ? await fetchAll(p, fresh, budget, log) : new Map();
+  const added = fresh.map((r) => ({
+    n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, origin: r.origin,
+    meta: null, text: null, bytes: 0, ok: false, error: null, ...(fetched.get(r.n) || {}),
+  }));
+  const resources = [...ledger.resources, ...added];
+  const objects = {};
+  for (const x of ledger.posts) objects[x.sid] = await readJson(path.join(p.posts, `${x.sid}.json`), null);
+  const sp = scorePrimary({ posts: ledger.posts, resources: resources.map((r) => ({ ...r })), objects });
+  const top = sp.primary.kind === 'resource' ? sp.resources[sp.primary.n - 1] : null;
+  const keep = top && resources.find((r) => dedupeKey(r) === dedupeKey(top));
+  const primary = keep ? { ...sp.primary, n: keep.n } : sp.primary;
+  const next = { ...ledger, resources, primary, supplement: { v: 1, ...supp, updated_at: now.toISOString() } };
+  await writeAtomic(p.related, JSON.stringify(next, null, 2) + '\n');
+  return true;
+}
+
 /*
  * Creates related.json (+ posts, resources) for an X link unless it exists; for an existing one, retries
  * resources whose meta file is missing. Returns 'exists' | 'created' | 'filled' | 'skipped' | 'failed'.
@@ -470,22 +556,35 @@ export async function captureRelated({ dir, record, budget = newRelatedBudget(),
   if (!m) return 'skipped';
   const rootId = m[2];
   const p = relatedPaths(dir, record.id);
-  if (fssync.existsSync(p.related)) return (await fillMissing(p, budget, now, log)) ? 'filled' : 'exists';
+  if (fssync.existsSync(p.related)) {
+    const filled = await fillMissing(p, budget, now, log);
+    let supp = false;
+    try { supp = await supplementExisting(p, record, budget, now, log); } catch (e) { log(`related supplement ${record.id}: ${e.message}`); }
+    return filled || supp ? 'filled' : 'exists';
+  }
   const att = await readJson(p.attempts, null);
   if (!shouldAttempt(att, now.getTime())) return 'skipped';
   try {
     const { json, from } = await loadThread(p, rootId);
-    const graph = graphFromThread(json, rootId, { extraParents: await walkParents(json, rootId, log) });
+    let graph = graphFromThread(json, rootId, { extraParents: await walkParents(json, rootId, log) });
+    const supp = {};
+    const extras = await gatherExtras({ p, record, posts: graph.posts, resources: graph.resources, supp, budget, now, log });
+    const more = newFromExtras(graph.resources, extras);
+    if (more.length) {
+      const sp = scorePrimary({ posts: graph.posts, resources: [...graph.resources.map(({ n, ...r }) => r), ...more], objects: graph.objects });
+      graph = { ...graph, ...sp };
+    }
     for (const [sid, obj] of Object.entries(graph.objects)) await writeNew(path.join(p.posts, `${sid}.json`), JSON.stringify(obj, null, 2) + '\n');
     const fetched = await fetchAll(p, graph.resources, budget, log);
     const ledger = {
       schema: 1, id: record.id, captured_at: now.toISOString(), captured_by: 'processor', thread_from: from, root: graph.root,
       posts: graph.posts,
       resources: graph.resources.map((r) => ({
-        n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in,
+        n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, ...(r.origin ? { origin: r.origin } : {}),
         meta: null, text: null, bytes: 0, ok: false, error: null, ...(fetched.get(r.n) || {}),
       })),
       primary: graph.primary,
+      supplement: { v: 1, ...supp },
     };
     await fs.writeFile(p.related, JSON.stringify(ledger, null, 2) + '\n', { flag: 'wx' });
     return 'created';

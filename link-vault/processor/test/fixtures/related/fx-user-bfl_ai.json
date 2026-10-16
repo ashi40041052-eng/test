@@ -1,0 +1,45 @@
+{
+ "code": 200,
+ "message": "OK",
+ "user": {
+  "screen_name": "bfl_ai",
+  "url": "https://x.com/bfl_ai",
+  "id": "1799993095154724864",
+  "followers": 55274,
+  "following": 0,
+  "likes": 227,
+  "media_count": 145,
+  "tweets": 343,
+  "name": "Black Forest Labs",
+  "description": "Powering visual intelligence everywhere. Creators of FLUX models.\n\njoin us: https://bfl.ai/careers",
+  "raw_description": {
+   "text": "Powering visual intelligence everywhere. Creators of FLUX models.\n\njoin us: https://t.co/XiNaRNYjFH",
+   "facets": [
+    {
+     "type": "url",
+     "indices": [
+      76,
+      99
+     ],
+     "original": "https://t.co/XiNaRNYjFH",
+     "replacement": "https://bfl.ai/careers",
+     "display": "bfl.ai/careers"
+    }
+   ]
+  },
+  "location": "",
+  "banner_url": "https://pbs.twimg.com/profile_banners/1799993095154724864/1755076591",
+  "avatar_url": "https://pbs.twimg.com/profile_images/1954888731053142016/NDyG-4-j_normal.jpg",
+  "joined": "Mon Jun 10 02:32:57 +0000 2024",
+  "protected": false,
+  "website": {
+   "url": "http://bfl.ai",
+   "display_url": "bfl.ai"
+  },
+  "verification": {
+   "verified": true,
+   "verified_at": null,
+   "type": "organization"
+  }
+ }
+}
