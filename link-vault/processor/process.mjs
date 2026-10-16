@@ -10,7 +10,10 @@
  * Raw links under links/ and delete/restore events under events/ come from the phone and are
  * NEVER modified or deleted by this script. A deleted link is only hidden.
  *
- * Usage: node process.mjs [--no-ai] [--no-git] [--data <dir>] [--max <n>]
+ * archive/ (immutable snapshots of each link's text + media) is created before analysis; with
+ * --archive-only (launchd, every 20 min) only archiving runs: no AI, no analysis files.
+ *
+ * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--data <dir>] [--max <n>]
  */
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
@@ -19,7 +22,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { normalizeUrl, walkJson, readJson, writeIfChanged } from './lib/util.mjs';
-import { fetchContent } from './lib/fetch-content.mjs';
+import { archiveLink, backfillMedia, loadArchives, loadContent, readSnapshot, dirSize, DEFAULT_LIMITS } from './lib/archive.mjs';
 import { buildOutputs } from './lib/build.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +33,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // ---------- config ----------
 
 const envFile = path.join(HERE, '.env');
-if (fssync.existsSync(envFile)) process.loadEnvFile(envFile);
+if (fssync.existsSync(envFile) && process.env.LV_NO_ENV_FILE !== '1') process.loadEnvFile(envFile);
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -45,7 +48,8 @@ const CONFIG = {
   model: process.env.LV_MODEL || (BACKEND === 'api' ? 'claude-opus-5-5' : 'opus'),
   claudeBin: process.env.LV_CLAUDE_BIN || 'claude',
   maxPerRun: Number(opt('--max') || process.env.LV_MAX_PER_RUN || 60),
-  useAi: !flag('--no-ai'),
+  archiveOnly: flag('--archive-only'),
+  useAi: !flag('--no-ai') && !flag('--archive-only'),
   useGit: !flag('--no-git') && process.env.LV_NO_GIT !== '1',
 };
 
@@ -87,11 +91,39 @@ function rebaseInProgress() {
   return false;
 }
 
+// While rebasing, "ours" is the upstream (remote) side. archive/ files are derived from the same
+// source data, so on conflict the remote version wins; any other conflict aborts as before.
+function resolveArchiveConflicts() {
+  for (let i = 0; i < 50; i++) {
+    const files = git('diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
+    if (files.some((f) => !f.startsWith('archive/'))) return false;
+    for (const f of files) {
+      try { git('checkout', '--ours', '--', f); git('add', '--', f); } catch { git('rm', '-q', '--cached', '--ignore-unmatch', '--', f); }
+    }
+    try {
+      execFileSync('git', ['-C', CONFIG.dataDir, 'rebase', '--continue'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...gitEnv, GIT_EDITOR: 'true' } });
+      return true;
+    } catch (e) {
+      if (!rebaseInProgress()) return true;
+      if (!git('diff', '--name-only', '--diff-filter=U')) {
+        // an emptied commit: skip it
+        try { git('rebase', '--skip'); if (!rebaseInProgress()) return true; } catch { return false; }
+      }
+    }
+  }
+  return false;
+}
+
 function gitPull() {
   if (rebaseInProgress()) { log('WARN: aborting a rebase left over from an earlier run'); git('rebase', '--abort'); }
   try {
     git('pull', '--rebase', '--autostash');
   } catch (e) {
+    if (rebaseInProgress()) {
+      let ok = false;
+      try { ok = resolveArchiveConflicts(); } catch {}
+      if (ok && !rebaseInProgress()) { log('resolved archive/ conflict in favour of the remote copy'); return; }
+    }
     // Never leave the repo stuck mid-rebase: the next run must start clean.
     if (rebaseInProgress()) { try { git('rebase', '--abort'); } catch {} }
     throw e;
@@ -121,7 +153,7 @@ function gitCommitAndPush(message) {
 
 // ---------- lock ----------
 
-const lockFile = path.join(os.tmpdir(), 'link-vault-processor.lock');
+const lockFile = process.env.LV_LOCK_FILE || path.join(os.tmpdir(), 'link-vault-processor.lock');
 function acquireLock() {
   try {
     const st = fssync.statSync(lockFile);
@@ -146,6 +178,8 @@ async function ensureLayout(dir) {
       '',
       '- `links/` … スマホから保存された元データ（1リンク1ファイル・追記のみ・絶対に編集/削除しない）',
       '- `analysis/` … AIによる分析結果（再生成可能）',
+      '- `archive/` … 各リンクの本文・画像のスナップショット（作成後は絶対に上書きしない）',
+      '- `ai/` … AI向けの入口（`ai/llms.txt` から読む。自動生成）',
       '- `categories.json` … カテゴリ一覧（名前・説明は手で編集してOK）',
       '- `index.json` … ダッシュボード用（自動生成）',
       '- `knowledge/` … AIに読ませる用のMarkdown（自動生成）',
@@ -194,6 +228,7 @@ async function loadAnalyses(dir) {
 
 const analysisPath = (dir, id) => path.join(dir, 'analysis', id.slice(0, 4), `${id}.json`);
 async function saveAnalysis(dir, a) {
+  if (CONFIG.archiveOnly) return; // archive-only never writes analysis files
   await writeIfChanged(analysisPath(dir, a.id), JSON.stringify(a, null, 2) + '\n');
 }
 
@@ -262,7 +297,31 @@ async function main() {
       }
     }
 
-    const todo = records.filter((r) => {
+    // ---- archive: snapshot text + media of every live link before anything else ----
+    const archiveStats = { created: 0, failed: 0 };
+    {
+      const budget = { remaining: DEFAULT_LIMITS.runBudgetBytes };
+      const allowVideo = dirSize(path.join(dir, 'archive')) < DEFAULT_LIMITS.stopVideosAboveBytes;
+      const byId = new Map(records.map((r) => [r.id, r]));
+      const aLog = (m) => log(`archive: ${m}`);
+      for (const id of firstByUrl.values()) {
+        if (deleted.has(id)) continue;
+        const record = byId.get(id);
+        try {
+          const res = await archiveLink({ dir, record, budget, allowVideo, log: aLog });
+          if (res === 'created') archiveStats.created++;
+          else if (res === 'failed') archiveStats.failed++;
+          else if (res === 'exists') {
+            // snapshot is never rewritten; only missing media files are added (e.g. what the phone could not fetch)
+            const snap = await readSnapshot(dir, id);
+            if (snap) await backfillMedia({ dir, snapshot: { ...snap, id }, budget, allowVideo, log: aLog });
+          }
+        } catch (e) { archiveStats.failed++; log(`WARN: archive ${id}: ${e.message}`); }
+      }
+      log(`archive: created=${archiveStats.created} failed=${archiveStats.failed} media=${Math.round((DEFAULT_LIMITS.runBudgetBytes - budget.remaining) / 1024)}KB total=${Math.round(dirSize(path.join(dir, 'archive')) / 1024 / 1024)}MB`);
+    }
+
+    const todo = CONFIG.archiveOnly ? [] : records.filter((r) => {
       const a = analyses.get(r.id);
       if (deleted.has(r.id)) return false; // don't spend AI on deleted links
       if (!a) return true;
@@ -279,7 +338,7 @@ async function main() {
       const queue = todo.slice(0, CONFIG.maxPerRun);
       for (let i = 0; i < queue.length; i += analyzer.batchSize) {
         const batch = [];
-        for (const r of queue.slice(i, i + analyzer.batchSize)) batch.push({ record: r, content: await fetchContent(r.url) });
+        for (const r of queue.slice(i, i + analyzer.batchSize)) batch.push({ record: r, content: await loadContent(dir, r) });
         // Categories are updated between batches so later batches reuse new ones.
         const results = await analyzer.analyzeBatch(batch, categories);
         for (const { record: r, content } of batch) {
@@ -323,15 +382,28 @@ async function main() {
       }
     }
 
-    await writeIfChanged(catFile, JSON.stringify(categories, null, 2) + '\n');
+    if (!CONFIG.archiveOnly) await writeIfChanged(catFile, JSON.stringify(categories, null, 2) + '\n');
 
-    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents });
+    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records) });
     // knowledge/categories is fully generated: remove files for categories that no longer exist.
     const catDir = path.join(dir, 'knowledge', 'categories');
     if (fssync.existsSync(catDir)) {
       for (const f of await fs.readdir(catDir)) {
         if (!files[`knowledge/categories/${f}`]) await fs.unlink(path.join(catDir, f));
       }
+    }
+    // ai/links and ai/categories are fully generated too (deleted links disappear; archive/ stays).
+    for (const sub of ['ai/categories', 'ai/links']) {
+      const root = path.join(dir, sub);
+      const walk = async (d) => {
+        let ents; try { ents = await fs.readdir(d, { withFileTypes: true }); } catch { return; }
+        for (const e of ents) {
+          const f = path.join(d, e.name);
+          if (e.isDirectory()) { await walk(f); try { await fs.rmdir(f); } catch {} }
+          else if (!files[path.relative(dir, f).split(path.sep).join('/')]) await fs.unlink(f);
+        }
+      };
+      await walk(root);
     }
     for (const [rel, content] of Object.entries(files)) {
       if (rel === 'index.json') continue; // written last (contains a timestamp)
@@ -347,7 +419,9 @@ async function main() {
     log(`done: analyzed=${analyzed} failed=${failed} total=${stats.total} pending=${stats.pending} categories=${stats.categories}`);
 
     if (CONFIG.useGit) {
-      const pushed = gitCommitAndPush(`analyze: ${analyzed} links (${new Date().toISOString().slice(0, 16)})`);
+      const pushed = gitCommitAndPush(CONFIG.archiveOnly
+        ? `archive: ${archiveStats.created} snapshots (${new Date().toISOString().slice(0, 16)})`
+        : `analyze: ${analyzed} links (${new Date().toISOString().slice(0, 16)})`);
       log(pushed ? 'pushed' : 'nothing to commit');
     }
   } finally {
