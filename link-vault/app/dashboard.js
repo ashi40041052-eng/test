@@ -204,7 +204,7 @@
     const relDone = renderRelated(id); // resolves true when the thread (which already shows the saved post) was drawn
     let snap = null, errMsg = '';
     try { snap = await loadSnapshot(id); } catch (e) { errMsg = e.message; }
-    const threadShown = await relDone;
+    const shown = (await relDone) || {}, threadShown = shown.post;
     if (state.sel !== id) return; // user moved on
     const ab = $('#archBox');
     if (!ab) return;
@@ -218,7 +218,7 @@
     const text = snap.text || (snap.web && snap.web.text) || '';
     if (text && !threadShown) h += '<div class="body">' + esc(text) + '</div>';
     if (snap.article && snap.article.text) h += '<h4>記事' + (snap.article.title ? ': ' + esc(snap.article.title) : '') + '</h4><div class="body">' + esc(snap.article.text) + '</div>';
-    if (snap.quote) h += '<h4>引用元' + (snap.quote.author && snap.quote.author.handle ? ' ' + esc(snap.quote.author.handle) : '') + '</h4><div class="quote">' + esc(snap.quote.text || '') + '</div>';
+    if (snap.quote && !shown.quote) h += '<h4>引用元' + (snap.quote.author && snap.quote.author.handle ? ' ' + esc(snap.quote.author.handle) : '') + '</h4><div class="quote">' + esc(snap.quote.text || '') + '</div>';
     if (snap.community_note) h += '<h4>コミュニティノート</h4><div class="quote">' + esc(typeof snap.community_note === 'string' ? snap.community_note : JSON.stringify(snap.community_note)) + '</div>';
     const photos = (snap.media || []).filter((m) => m.local);
     const remote = (snap.media || []).length - photos.length;
@@ -304,7 +304,7 @@
     }
     const others = v.rest;
     if (others.length) tb.innerHTML += '<h4>その他のリソース</h4><div class="tr">' + others.map(miniRes).join(' ') + '</div>';
-    return DL.threadShowsPost(v);
+    return { post: DL.threadShowsPost(v), quote: DL.threadShowsQuote(v) };
   }
 
   function renderXrStatus() {

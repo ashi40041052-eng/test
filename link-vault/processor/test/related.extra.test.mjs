@@ -161,7 +161,7 @@ test('e2e: captured replies reach the analysis prompt and ai/links md; --reanaly
     await fs.writeFile(path.join(root, 'related', 'x-replies.json'), JSON.stringify({ schema: 1, id: MIR.id, captured_at: '2026-10-16T01:00:00.000Z', replies: [{ n: 1, handle: '@bob', name: 'Bob', text: 'REPLYMARK see the repo', time: '2026-10-16T01:00:00Z', own: false, links: ['https://example.org/repo'] }], urls: [] }));
     for (const e of [MIR, FLX, NOTOOL]) {
       await fs.mkdir(path.join(t.dir, 'analysis/2026'), { recursive: true });
-      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', analyzed_at: '2026-10-17T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [], related_used: { posts: 1, resources: 0, replies: 0 } }));
+      await fs.writeFile(path.join(t.dir, 'analysis/2026', `${e.id}.json`), JSON.stringify({ id: e.id, status: 'analyzed', analyzed_at: '2026-10-17T02:00:00.000Z', primary_subject: { kind: 'self', url: null, name: '' }, resource_kind: 'none', title: 't', summary: 's', category: 'AI活用', tags: [], related_used: { posts: 1, resources: 0, replies: e === MIR ? 1 : 0 } }));
     }
     // analyzed after the capture and related_used.replies is present: only a link with replies the analysis never saw is redone
     await reanalyze();

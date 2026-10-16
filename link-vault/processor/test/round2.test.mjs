@@ -172,3 +172,56 @@ test('dashboard server serves logs/x-replies-status.json (and nothing else from 
     assert.equal((await get('/logs/2026-10.log'))[0], 404);
   } finally { srv.kill(); await fs.rm(dir, { recursive: true, force: true }); }
 });
+
+// ---- round 3 ----
+test('process: related_used.replies re-analyzes when the reply count changes in either direction', async () => {
+  const dir = await tmp();
+  const id = '20261016-090000-aaaa0002';
+  const w = async (rel, o) => { const f = path.join(dir, rel); await fs.mkdir(path.dirname(f), { recursive: true }); await fs.writeFile(f, typeof o === 'string' ? o : JSON.stringify(o)); };
+  const rep = (n) => ({ schema: 1, id, captured_at: '2026-10-16T00:30:00.000Z', main: null, urls: [], replies: Array.from({ length: n }, (_, i) => ({ n: i + 1, handle: '@u' + i, name: 'U', text: 'r' + i, own: false, links: [] })) });
+  await w(`links/2026/10/${id}.json`, { id, url: 'http://127.0.0.1:9/page', created_at: '2026-10-16T09:00:00+09:00' });
+  await w(`archive/2026/${id}/snapshot.json`, { schema: 1, id, source_type: 'web', canonical_url: 'http://127.0.0.1:9/page', captured_at: '2026-10-16T00:00:00Z', captured_by: 'test', text: 'body', media: [] });
+  await w(`archive/2026/${id}/related.json`, { schema: 1, id, posts: [], resources: [], supplement: {} });
+  await w(`archive/2026/${id}/related/x-replies.json`, rep(1)); // older than analyzed_at, count 1 vs 3 seen
+  await w(`analysis/2026/${id}.json`, { id, status: 'analyzed', analyzed_at: '2026-10-16T01:00:00.000Z', title: 't', summary: 's', key_points: [], category: 'AI活用', tags: [], primary_subject: { kind: 'self', url: null, name: '' }, related_used: { posts: 0, resources: 0, replies: 3 } });
+  await w('categories.json', [{ name: 'AI活用', description: '', created_at: '2026-10-01T00:00:00Z' }]);
+  const logFile = path.join(dir, 'fake.log');
+  const env = baseEnv({ LV_DATA_DIR: dir, LV_BACKEND: 'claude-code', LV_CLAUDE_BIN: path.join(HERE, 'fake-claude.mjs'), FAKE_CLAUDE_LOG: logFile, LV_LOCK_FILE: path.join(dir, 'lock') });
+  const proc = () => run(process.execPath, [PROC, '--no-git'], { env });
+  const calls = async () => (await fs.readFile(logFile, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).length;
+  try {
+    await proc();
+    assert.equal(await calls(), 1, 'shrink 3 -> 1 re-analyzes');
+    await proc();
+    assert.equal(await calls(), 1, 'stable afterwards');
+    await w(`archive/2026/${id}/related/x-replies.json`, { ...rep(0), captured_at: '2026-10-16T00:30:00.000Z' });
+    await proc();
+    assert.equal(await calls(), 2, 'shrink 1 -> 0 re-analyzes');
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('run-guarded: a syntax error in lib logs one skip line and exits 0; a clean tree runs process.mjs', async () => {
+  const dir = await tmp();
+  try {
+    await fs.mkdir(path.join(dir, 'lib'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'process.mjs'), "console.log('RAN', process.argv.slice(2).join(','));\n");
+    await fs.writeFile(path.join(dir, 'lib', 'ok.mjs'), 'export const a = 1;\n');
+    const GUARD = path.join(HERE, '..', 'run-guarded.mjs');
+    const env = { ...process.env, LV_GUARD_DIR: dir };
+    const good = await run(process.execPath, [GUARD, '--archive-only'], { env });
+    assert.match(good.stdout, /RAN --archive-only/);
+    await fs.writeFile(path.join(dir, 'lib', 'bad.mjs'), 'export const = ;\n');
+    const bad = await run(process.execPath, [GUARD], { env });
+    assert.equal(bad.code ?? 0, 0);
+    assert.doesNotMatch(bad.stdout, /RAN/);
+    assert.equal(bad.stdout.trim().split('\n').length, 1);
+    assert.match(bad.stdout, /skip: syntax error in lib\/bad\.mjs/);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+test('stripFrontmatter removes the YAML block (HF model-card languages) from README excerpts', async () => {
+  const { stripFrontmatter } = await import('../lib/ai-build.mjs');
+  assert.equal(stripFrontmatter('---\nlanguage:\n- en\n- ja\nlicense: mit\n---\n# Title\nbody'), '# Title\nbody');
+  assert.equal(stripFrontmatter('# No front\n---\nrule'), '# No front\n---\nrule');
+  assert.equal(stripFrontmatter(undefined), '');
+});

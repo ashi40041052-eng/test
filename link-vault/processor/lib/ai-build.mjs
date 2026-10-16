@@ -131,6 +131,11 @@ function repliesSection(bundle) {
 
 // ---------- one link ----------
 
+// Drop a leading YAML frontmatter block (--- ... ---), e.g. the HF model-card language list.
+export function stripFrontmatter(t) {
+  return String(t ?? '').replace(/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '').replace(/^\s+/, '');
+}
+
 export function linkMarkdown(item, record, analysis, snap, bundle = null) {
   const f = facts(item, record, analysis, snap);
   const subj = subjectOf(bundle, analysis);
@@ -173,7 +178,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
   if (subj?.kind === 'resource') {
     body.push('## 主題リソース', ...resourceFacts(subj.res, subj.loaded));
     if (subj.loaded?.text) {
-      const t = subj.loaded.text;
+      const t = stripFrontmatter(subj.loaded.text);
       const label = subj.loaded.meta?.body_source === 'page' ? 'モデルカード(公開ページの本文)' : 'README';
       body.push('', `### ${label}(先頭 ${t.length.toLocaleString('en-US')} 字${subj.loaded.meta?.truncated ? '・ここで打ち切り' : ''})`, escapeHeadings(t));
     }

@@ -416,6 +416,7 @@ async function main() {
         const added = Date.parse(rel.added || '');
         if (added && added > seenAt) return true; // supplement resources the AI has not seen
         if (rel.repliesN && (a.related_used?.replies === undefined || Date.parse(rel.repliesAt || '') > seenAt)) return true; // replies the AI has not seen
+        if (a.related_used?.replies !== undefined && a.related_used.replies !== rel.repliesN) return true; // reply count changed (grew or shrank)
       }
       if (a.status !== 'failed') return false;
       return (a.attempts || 0) < MAX_ATTEMPTS || Date.now() - new Date(a.analyzed_at).getTime() > DAY_MS;
