@@ -107,7 +107,7 @@ async function setup(grokBody) {
   }
   const env = {
     ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: dir, LV_CLAUDE_BIN: '/nonexistent/claude', LV_FXTWITTER_BASE: `${w.base}/fx`,
-    LV_GROK_BIN: bin, LV_HUB_HOSTS: `${w.base.replace('http://', '')}/hub/`, LV_XSEARCH_COOLDOWN_FILE: path.join(dir, 'cooldown.json'), LV_NO_GH: '1',
+    LV_GROK_BIN: bin, LV_XSEARCH: '1', LV_HUB_HOSTS: `${w.base.replace('http://', '')}/hub/`, LV_XSEARCH_COOLDOWN_FILE: path.join(dir, 'cooldown.json'), LV_NO_GH: '1',
   };
   const proc = (extra = {}) => run(process.execPath, [PROC, '--archive-only', '--no-git'], { env: { ...env, ...extra } });
   const calls = async () => (await fs.readFile(counter, 'utf8').catch(() => '')).split('\n').filter(Boolean);
@@ -204,13 +204,13 @@ test('e2e: a v3 related.json gains supplement resources later -> --reanalyze-rel
     assert.ok(m.resources.some((r) => r.origin === 'profile:@MireloAI'));
     assert.equal(m.posts.length, 2, 'existing entries untouched');
     assert.ok(m.supplement.resources_added_at > '2026-10-16T02:00:00.000Z');
-    await run(process.execPath, [PROC, '--reanalyze-related', '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_GROK_BIN: path.join(t.dir, 'fake-grok.sh'), LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
+    await run(process.execPath, [PROC, '--reanalyze-related', '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_GROK_BIN: path.join(t.dir, 'fake-grok.sh'), LV_XSEARCH: '1', LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
     const c = await calls();
     assert.equal(c.length, 1);
     assert.ok(c[0].includes(MIR.id) && !c[0].includes(NOTOOL.id), 'only the supplemented link is redone');
     assert.match(c[0], /site\/mirelo/);
     // and not again
-    await run(process.execPath, [PROC, '--reanalyze-related', '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_GROK_BIN: path.join(t.dir, 'fake-grok.sh'), LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
+    await run(process.execPath, [PROC, '--reanalyze-related', '--no-git'], { env: { ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: t.dir, LV_FXTWITTER_BASE: `${t.base}/fx`, LV_GROK_BIN: path.join(t.dir, 'fake-grok.sh'), LV_XSEARCH: '1', LV_HUB_HOSTS: `${t.base.replace('http://', '')}/hub/`, LV_NO_GH: '1', ...ai } });
     assert.equal((await calls()).length, 1);
   } finally { await t.cleanup(); }
 });
