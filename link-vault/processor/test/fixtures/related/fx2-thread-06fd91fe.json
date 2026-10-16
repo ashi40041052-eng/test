@@ -1,0 +1,373 @@
+{
+ "status": {
+  "type": "status",
+  "url": "https://x.com/pentacoxian_dev/status/2110755123748340030",
+  "id": "2110755123748340030",
+  "text": "Fish Audio Drama 3\uff0835B MoE TTS\uff09\u3092\u300112GB VRAM\u3067\u52d5\u304b\u305b\u308b\u65e5\u82f1\u5171\u306b\u81ea\u7136\u306a\u300cdrama3-small\u300d\u3092\u516c\u958b\u3057\u307e\u3059\uff01\n\n\u5143\u30e2\u30c7\u30eb\u306fFP8\u306748GB\u30af\u30e9\u30b9\u5fc5\u9808\u30fb\u30d5\u30a1\u30a4\u30eb\u308240GB\u524d\u5f8c\u306a\u306e\u306b\u5bfe\u3057\u3001\u3053\u3061\u3089\u306f \u7d049.7GB\u306b\u5727\u7e2e\u3002\u30d4\u30fc\u30afVRAM\u7d0410.3GB\u3067\u3001RTX 4070\u30af\u30e9\u30b9\u3067\u3082(\u305f\u3076\u3093)\u52d5\u304d\u307e\u3059\u3002\n\n\u30bc\u30ed\u30b7\u30e7\u30c3\u30c8\u97f3\u58f0\u30af\u30ed\u30fc\u30f3\uff083\u301c30\u79d2\u53c2\u7167\uff09\u3001[laughs][sighs]\u30bf\u30b0\u3001\u82f1\u8a9e\u30b9\u30bf\u30a4\u30eb\u6307\u793a\u3001\u65e5\u672c\u8a9e\uff0b\u82f1\u8a9e\u6280\u8853\u7528\u8a9e\u6df7\u5728\u306b\u5bfe\u5fdc\u3002\u3053\u306e\u30e2\u30c7\u30eb\u7279\u6709\u306e\u6587\u5883\u754c\u306e\u6c88\u9ed9\u30cf\u30de\u308a\u3082\u4fee\u6b63\u30d1\u30c3\u30c1\u4ed8\u304d\u3067\u304b\u306a\u308a\u6e1b\u3063\u3066\u3044\u307e\u3059\u3002\n\nRTX 4090\u3067\u751f\u6210\u97f3\u58f0\u306e\u7d042.6\u500d\u901f\u751f\u6210\u30015090\u3067\u7d043.2\u500d\u901f\u3002\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u3067\u30821.5\u500d\u4ee5\u4e0a\u3002\n\nHF\u3067\u751f\u6210\u54c1\u8cea\u306e\u78ba\u8a8d\u3082\u51fa\u6765\u308b\u306e\u3067\u662f\u975e\u8a66\u3057\u3066\u307f\u3066\u304f\u3060\u3055\u3044\uff01\n\n#\u5730\u5143\u306eLLM #LocalLLM #TTS #Drama3",
+  "raw_text": {
+   "text": "Fish Audio Drama 3\uff0835B MoE TTS\uff09\u3092\u300112GB VRAM\u3067\u52d5\u304b\u305b\u308b\u65e5\u82f1\u5171\u306b\u81ea\u7136\u306a\u300cdrama3-small\u300d\u3092\u516c\u958b\u3057\u307e\u3059\uff01\n\n\u5143\u30e2\u30c7\u30eb\u306fFP8\u306748GB\u30af\u30e9\u30b9\u5fc5\u9808\u30fb\u30d5\u30a1\u30a4\u30eb\u308240GB\u524d\u5f8c\u306a\u306e\u306b\u5bfe\u3057\u3001\u3053\u3061\u3089\u306f \u7d049.7GB\u306b\u5727\u7e2e\u3002\u30d4\u30fc\u30afVRAM\u7d0410.3GB\u3067\u3001RTX 4070\u30af\u30e9\u30b9\u3067\u3082(\u305f\u3076\u3093)\u52d5\u304d\u307e\u3059\u3002\n\n\u30bc\u30ed\u30b7\u30e7\u30c3\u30c8\u97f3\u58f0\u30af\u30ed\u30fc\u30f3\uff083\u301c30\u79d2\u53c2\u7167\uff09\u3001[laughs][sighs]\u30bf\u30b0\u3001\u82f1\u8a9e\u30b9\u30bf\u30a4\u30eb\u6307\u793a\u3001\u65e5\u672c\u8a9e\uff0b\u82f1\u8a9e\u6280\u8853\u7528\u8a9e\u6df7\u5728\u306b\u5bfe\u5fdc\u3002\u3053\u306e\u30e2\u30c7\u30eb\u7279\u6709\u306e\u6587\u5883\u754c\u306e\u6c88\u9ed9\u30cf\u30de\u308a\u3082\u4fee\u6b63\u30d1\u30c3\u30c1\u4ed8\u304d\u3067\u304b\u306a\u308a\u6e1b\u3063\u3066\u3044\u307e\u3059\u3002\n\nRTX 4090\u3067\u751f\u6210\u97f3\u58f0\u306e\u7d042.6\u500d\u901f\u751f\u6210\u30015090\u3067\u7d043.2\u500d\u901f\u3002\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u3067\u30821.5\u500d\u4ee5\u4e0a\u3002\n\nHF\u3067\u751f\u6210\u54c1\u8cea\u306e\u78ba\u8a8d\u3082\u51fa\u6765\u308b\u306e\u3067\u662f\u975e\u8a66\u3057\u3066\u307f\u3066\u304f\u3060\u3055\u3044\uff01\n\n#\u5730\u5143\u306eLLM #LocalLLM #TTS #Drama3",
+   "display_text_range": [
+    0,
+    385
+   ],
+   "facets": [
+    {
+     "type": "media",
+     "indices": [
+      168,
+      191
+     ],
+     "id": "2110755119684046848",
+     "display": "pic.x.com/sucQnMppxN",
+     "original": "https://t.co/sucQnMppxN",
+     "replacement": "https://x.com/pentacoxian_dev/status/2110755123748340030/photo/1"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      355,
+      362
+     ],
+     "original": "\u5730\u5143\u306eLLM"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      363,
+      372
+     ],
+     "original": "LocalLLM"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      373,
+      377
+     ],
+     "original": "TTS"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      378,
+      385
+     ],
+     "original": "Drama3"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "pentacoxian_dev",
+   "url": "https://x.com/pentacoxian_dev",
+   "id": "1853135012646080512",
+   "followers": 2477,
+   "following": 51,
+   "likes": 65,
+   "media_count": 28,
+   "statuses": 88,
+   "name": "PentaCoxian",
+   "description": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+   "raw_description": {
+    "text": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+    "facets": []
+   },
+   "location": "Tokyo",
+   "banner_url": "https://pbs.twimg.com/profile_banners/1853135012646080512/1780598284",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2106542754339901440/mjqKgR3I_200x200.jpg",
+   "joined": "Sun Nov 03 18:00:12 +0000 2024",
+   "protected": false,
+   "website": null,
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "type": "profile"
+  },
+  "replies": 3,
+  "reposts": 41,
+  "likes": 302,
+  "bookmarks": 480,
+  "quotes": 9,
+  "embed_card": "summary_large_image",
+  "created_at": "Thu Oct 15 15:30:12 +0000 2026",
+  "created_timestamp": 1792078212,
+  "possibly_sensitive": false,
+  "views": 29600,
+  "is_note_tweet": true,
+  "community_note": null,
+  "lang": "ja",
+  "replying_to": null,
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "id": "2110755119684046848",
+     "url": "https://pbs.twimg.com/media/HUromRya0AARP7z.jpg?name=orig",
+     "width": 2400,
+     "height": 1350
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "id": "2110755119684046848",
+     "url": "https://pbs.twimg.com/media/HUromRya0AARP7z.jpg?name=orig",
+     "width": 2400,
+     "height": 1350
+    }
+   ]
+  },
+  "provider": "twitter",
+  "reposted_by": null
+ },
+ "thread": [
+  {
+   "type": "status",
+   "url": "https://x.com/pentacoxian_dev/status/2110755123748340030",
+   "id": "2110755123748340030",
+   "text": "Fish Audio Drama 3\uff0835B MoE TTS\uff09\u3092\u300112GB VRAM\u3067\u52d5\u304b\u305b\u308b\u65e5\u82f1\u5171\u306b\u81ea\u7136\u306a\u300cdrama3-small\u300d\u3092\u516c\u958b\u3057\u307e\u3059\uff01\n\n\u5143\u30e2\u30c7\u30eb\u306fFP8\u306748GB\u30af\u30e9\u30b9\u5fc5\u9808\u30fb\u30d5\u30a1\u30a4\u30eb\u308240GB\u524d\u5f8c\u306a\u306e\u306b\u5bfe\u3057\u3001\u3053\u3061\u3089\u306f \u7d049.7GB\u306b\u5727\u7e2e\u3002\u30d4\u30fc\u30afVRAM\u7d0410.3GB\u3067\u3001RTX 4070\u30af\u30e9\u30b9\u3067\u3082(\u305f\u3076\u3093)\u52d5\u304d\u307e\u3059\u3002\n\n\u30bc\u30ed\u30b7\u30e7\u30c3\u30c8\u97f3\u58f0\u30af\u30ed\u30fc\u30f3\uff083\u301c30\u79d2\u53c2\u7167\uff09\u3001[laughs][sighs]\u30bf\u30b0\u3001\u82f1\u8a9e\u30b9\u30bf\u30a4\u30eb\u6307\u793a\u3001\u65e5\u672c\u8a9e\uff0b\u82f1\u8a9e\u6280\u8853\u7528\u8a9e\u6df7\u5728\u306b\u5bfe\u5fdc\u3002\u3053\u306e\u30e2\u30c7\u30eb\u7279\u6709\u306e\u6587\u5883\u754c\u306e\u6c88\u9ed9\u30cf\u30de\u308a\u3082\u4fee\u6b63\u30d1\u30c3\u30c1\u4ed8\u304d\u3067\u304b\u306a\u308a\u6e1b\u3063\u3066\u3044\u307e\u3059\u3002\n\nRTX 4090\u3067\u751f\u6210\u97f3\u58f0\u306e\u7d042.6\u500d\u901f\u751f\u6210\u30015090\u3067\u7d043.2\u500d\u901f\u3002\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u3067\u30821.5\u500d\u4ee5\u4e0a\u3002\n\nHF\u3067\u751f\u6210\u54c1\u8cea\u306e\u78ba\u8a8d\u3082\u51fa\u6765\u308b\u306e\u3067\u662f\u975e\u8a66\u3057\u3066\u307f\u3066\u304f\u3060\u3055\u3044\uff01\n\n#\u5730\u5143\u306eLLM #LocalLLM #TTS #Drama3",
+   "raw_text": {
+    "text": "Fish Audio Drama 3\uff0835B MoE TTS\uff09\u3092\u300112GB VRAM\u3067\u52d5\u304b\u305b\u308b\u65e5\u82f1\u5171\u306b\u81ea\u7136\u306a\u300cdrama3-small\u300d\u3092\u516c\u958b\u3057\u307e\u3059\uff01\n\n\u5143\u30e2\u30c7\u30eb\u306fFP8\u306748GB\u30af\u30e9\u30b9\u5fc5\u9808\u30fb\u30d5\u30a1\u30a4\u30eb\u308240GB\u524d\u5f8c\u306a\u306e\u306b\u5bfe\u3057\u3001\u3053\u3061\u3089\u306f \u7d049.7GB\u306b\u5727\u7e2e\u3002\u30d4\u30fc\u30afVRAM\u7d0410.3GB\u3067\u3001RTX 4070\u30af\u30e9\u30b9\u3067\u3082(\u305f\u3076\u3093)\u52d5\u304d\u307e\u3059\u3002\n\n\u30bc\u30ed\u30b7\u30e7\u30c3\u30c8\u97f3\u58f0\u30af\u30ed\u30fc\u30f3\uff083\u301c30\u79d2\u53c2\u7167\uff09\u3001[laughs][sighs]\u30bf\u30b0\u3001\u82f1\u8a9e\u30b9\u30bf\u30a4\u30eb\u6307\u793a\u3001\u65e5\u672c\u8a9e\uff0b\u82f1\u8a9e\u6280\u8853\u7528\u8a9e\u6df7\u5728\u306b\u5bfe\u5fdc\u3002\u3053\u306e\u30e2\u30c7\u30eb\u7279\u6709\u306e\u6587\u5883\u754c\u306e\u6c88\u9ed9\u30cf\u30de\u308a\u3082\u4fee\u6b63\u30d1\u30c3\u30c1\u4ed8\u304d\u3067\u304b\u306a\u308a\u6e1b\u3063\u3066\u3044\u307e\u3059\u3002\n\nRTX 4090\u3067\u751f\u6210\u97f3\u58f0\u306e\u7d042.6\u500d\u901f\u751f\u6210\u30015090\u3067\u7d043.2\u500d\u901f\u3002\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u3067\u30821.5\u500d\u4ee5\u4e0a\u3002\n\nHF\u3067\u751f\u6210\u54c1\u8cea\u306e\u78ba\u8a8d\u3082\u51fa\u6765\u308b\u306e\u3067\u662f\u975e\u8a66\u3057\u3066\u307f\u3066\u304f\u3060\u3055\u3044\uff01\n\n#\u5730\u5143\u306eLLM #LocalLLM #TTS #Drama3",
+    "display_text_range": [
+     0,
+     385
+    ],
+    "facets": [
+     {
+      "type": "media",
+      "indices": [
+       168,
+       191
+      ],
+      "id": "2110755119684046848",
+      "display": "pic.x.com/sucQnMppxN",
+      "original": "https://t.co/sucQnMppxN",
+      "replacement": "https://x.com/pentacoxian_dev/status/2110755123748340030/photo/1"
+     },
+     {
+      "type": "hashtag",
+      "indices": [
+       355,
+       362
+      ],
+      "original": "\u5730\u5143\u306eLLM"
+     },
+     {
+      "type": "hashtag",
+      "indices": [
+       363,
+       372
+      ],
+      "original": "LocalLLM"
+     },
+     {
+      "type": "hashtag",
+      "indices": [
+       373,
+       377
+      ],
+      "original": "TTS"
+     },
+     {
+      "type": "hashtag",
+      "indices": [
+       378,
+       385
+      ],
+      "original": "Drama3"
+     }
+    ]
+   },
+   "author": {
+    "screen_name": "pentacoxian_dev",
+    "url": "https://x.com/pentacoxian_dev",
+    "id": "1853135012646080512",
+    "followers": 2477,
+    "following": 51,
+    "likes": 65,
+    "media_count": 28,
+    "statuses": 88,
+    "name": "PentaCoxian",
+    "description": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+    "raw_description": {
+     "text": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+     "facets": []
+    },
+    "location": "Tokyo",
+    "banner_url": "https://pbs.twimg.com/profile_banners/1853135012646080512/1780598284",
+    "avatar_url": "https://pbs.twimg.com/profile_images/2106542754339901440/mjqKgR3I_200x200.jpg",
+    "joined": "Sun Nov 03 18:00:12 +0000 2024",
+    "protected": false,
+    "website": null,
+    "verification": {
+     "verified": true,
+     "verified_at": null,
+     "type": "individual"
+    },
+    "type": "profile"
+   },
+   "replies": 3,
+   "reposts": 41,
+   "likes": 302,
+   "bookmarks": 480,
+   "quotes": 9,
+   "embed_card": "summary_large_image",
+   "created_at": "Thu Oct 15 15:30:12 +0000 2026",
+   "created_timestamp": 1792078212,
+   "possibly_sensitive": false,
+   "views": 29600,
+   "is_note_tweet": true,
+   "community_note": null,
+   "lang": "ja",
+   "replying_to": null,
+   "media": {
+    "all": [
+     {
+      "type": "photo",
+      "id": "2110755119684046848",
+      "url": "https://pbs.twimg.com/media/HUromRya0AARP7z.jpg?name=orig",
+      "width": 2400,
+      "height": 1350
+     }
+    ],
+    "photos": [
+     {
+      "type": "photo",
+      "id": "2110755119684046848",
+      "url": "https://pbs.twimg.com/media/HUromRya0AARP7z.jpg?name=orig",
+      "width": 2400,
+      "height": 1350
+     }
+    ]
+   },
+   "provider": "twitter",
+   "reposted_by": null
+  },
+  {
+   "type": "status",
+   "url": "https://x.com/pentacoxian_dev/status/2110755127082799166",
+   "id": "2110755127082799166",
+   "text": "\u7cbe\u5ea6\u9762\u3067\u3082\u3001\u30a8\u30ad\u30b9\u30d1\u30fc\u30c8\u3092\u7d0445%\u307e\u3067\u526a\u5b9a\uff0bspeech imatrix\u306eIQ3_XXS\uff0b\u84b8\u7559LoRA\u3067\u3001\u5143\u306e\u8868\u73fe\u529b\u3092\u306a\u308b\u3079\u304f\u6b8b\u3057\u3064\u3064Q2\u30ec\u30d9\u30eb\u307e\u3067\u30b5\u30a4\u30ba\u3092\u524a\u3063\u3066\u3044\u307e\u3059\u3002\n\u30e9\u30f3\u30bf\u30a4\u30e0\u306faudio.cpp\u30d1\u30c3\u30c1\u30d5\u30a1\u30a4\u30eb\u3092\u516c\u958b\u3057\u3066\u3044\u307e\u3059\u3002\n\n\u30e2\u30c7\u30eb\uff1a\nhttps://huggingface.co/pentacoxian-dev/drama3-small-GGUF\n\u30aa\u30ea\u30b8\u30ca\u30eb\u30c7\u30e2Space\uff1a\nhttps://huggingface.co/spaces/fishaudio/Drama-3",
+   "raw_text": {
+    "text": "\u7cbe\u5ea6\u9762\u3067\u3082\u3001\u30a8\u30ad\u30b9\u30d1\u30fc\u30c8\u3092\u7d0445%\u307e\u3067\u526a\u5b9a\uff0bspeech imatrix\u306eIQ3_XXS\uff0b\u84b8\u7559LoRA\u3067\u3001\u5143\u306e\u8868\u73fe\u529b\u3092\u306a\u308b\u3079\u304f\u6b8b\u3057\u3064\u3064Q2\u30ec\u30d9\u30eb\u307e\u3067\u30b5\u30a4\u30ba\u3092\u524a\u3063\u3066\u3044\u307e\u3059\u3002\n\u30e9\u30f3\u30bf\u30a4\u30e0\u306faudio.cpp\u30d1\u30c3\u30c1\u30d5\u30a1\u30a4\u30eb\u3092\u516c\u958b\u3057\u3066\u3044\u307e\u3059\u3002\n\n\u30e2\u30c7\u30eb\uff1a\nhttps://t.co/E5wJoNjzSd\n\u30aa\u30ea\u30b8\u30ca\u30eb\u30c7\u30e2Space\uff1a\nhttps://t.co/3CpwmkxprB",
+    "display_text_range": [
+     0,
+     185
+    ],
+    "facets": [
+     {
+      "type": "url",
+      "indices": [
+       124,
+       147
+      ],
+      "original": "https://t.co/E5wJoNjzSd",
+      "replacement": "https://huggingface.co/pentacoxian-dev/drama3-small-GGUF",
+      "display": "huggingface.co/pentacoxian-de\u2026"
+     },
+     {
+      "type": "url",
+      "indices": [
+       162,
+       185
+      ],
+      "original": "https://t.co/3CpwmkxprB",
+      "replacement": "https://huggingface.co/spaces/fishaudio/Drama-3",
+      "display": "huggingface.co/spaces/fishaud\u2026"
+     }
+    ]
+   },
+   "author": {
+    "screen_name": "pentacoxian_dev",
+    "url": "https://x.com/pentacoxian_dev",
+    "id": "1853135012646080512",
+    "followers": 2477,
+    "following": 51,
+    "likes": 65,
+    "media_count": 28,
+    "statuses": 88,
+    "name": "PentaCoxian",
+    "description": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+    "raw_description": {
+     "text": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+     "facets": []
+    },
+    "location": "Tokyo",
+    "banner_url": "https://pbs.twimg.com/profile_banners/1853135012646080512/1780598284",
+    "avatar_url": "https://pbs.twimg.com/profile_images/2106542754339901440/mjqKgR3I_200x200.jpg",
+    "joined": "Sun Nov 03 18:00:12 +0000 2024",
+    "protected": false,
+    "website": null,
+    "verification": {
+     "verified": true,
+     "verified_at": null,
+     "type": "individual"
+    },
+    "type": "profile"
+   },
+   "replies": 0,
+   "reposts": 0,
+   "likes": 15,
+   "bookmarks": 34,
+   "quotes": 0,
+   "embed_card": "tweet",
+   "created_at": "Thu Oct 15 15:30:12 +0000 2026",
+   "created_timestamp": 1792078212,
+   "possibly_sensitive": false,
+   "views": 2154,
+   "is_note_tweet": false,
+   "community_note": null,
+   "lang": "ja",
+   "replying_to": {
+    "screen_name": "pentacoxian_dev",
+    "status": "2110755123748340030",
+    "url": "https://x.com/pentacoxian_dev/status/2110755123748340030",
+    "profile_url": "https://x.com/pentacoxian_dev"
+   },
+   "media": {},
+   "card": {
+    "url": "https://huggingface.co/pentacoxian-dev/drama3-small-GGUF",
+    "title": "pentacoxian-dev/drama3-small-GGUF \u00b7 Hugging Face",
+    "description": "We\u2019re on a journey to advance and democratize artificial intelligence through open source and open science.",
+    "domain": "huggingface.co",
+    "image": {
+     "width": 800,
+     "height": 419,
+     "url": "https://pbs.twimg.com/card_img/2110752426752200704/V3uHzeDo?format=jpg&name=800x419"
+    }
+   },
+   "provider": "twitter",
+   "reposted_by": null
+  }
+ ],
+ "author": {
+  "screen_name": "pentacoxian_dev",
+  "url": "https://x.com/pentacoxian_dev",
+  "id": "1853135012646080512",
+  "followers": 2477,
+  "following": 51,
+  "likes": 65,
+  "media_count": 28,
+  "statuses": 88,
+  "name": "PentaCoxian",
+  "description": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+  "raw_description": {
+   "text": "Developer and student at icu : novel 4DGS systems,3DGS, and Temporally stable depth video, pushing the limits of VR/XR.\n\u6700\u8fd1\u306f\u30ed\u30fc\u30ab\u30ebLLM\u3082\u3002\u304a\u304b\u3052\u3066\u6696\u304b\u3044\u8db3\u5143\u306b\u306d\u3053\u304c\u4e00\u7dd2\u306b\u5bdd\u3066\u304f\u308c\u3066\u6bce\u65e5\u30cf\u30c3\u30d4\u30fc",
+   "facets": []
+  },
+  "location": "Tokyo",
+  "banner_url": "https://pbs.twimg.com/profile_banners/1853135012646080512/1780598284",
+  "avatar_url": "https://pbs.twimg.com/profile_images/2106542754339901440/mjqKgR3I_200x200.jpg",
+  "joined": "Sun Nov 03 18:00:12 +0000 2024",
+  "protected": false,
+  "website": null,
+  "verification": {
+   "verified": true,
+   "verified_at": null,
+   "type": "individual"
+  },
+  "type": "profile"
+ },
+ "code": 200
+}

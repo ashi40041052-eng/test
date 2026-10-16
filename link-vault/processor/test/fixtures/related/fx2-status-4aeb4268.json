@@ -1,0 +1,124 @@
+{
+ "status": {
+  "type": "status",
+  "url": "https://x.com/studio_yebisu/status/2110164449470652678",
+  "id": "2110164449470652678",
+  "text": "https://huggingface.co/fishaudio/drama-3",
+  "raw_text": {
+   "text": "https://t.co/6AwJJW7Wyf",
+   "display_text_range": [
+    0,
+    23
+   ],
+   "facets": [
+    {
+     "type": "url",
+     "indices": [
+      0,
+      23
+     ],
+     "original": "https://t.co/6AwJJW7Wyf",
+     "replacement": "https://huggingface.co/fishaudio/drama-3",
+     "display": "huggingface.co/fishaudio/dram\u2026"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "studio_yebisu",
+   "url": "https://x.com/studio_yebisu",
+   "id": "1957687165678497792",
+   "followers": 7821,
+   "following": 129,
+   "likes": 1629,
+   "media_count": 239,
+   "statuses": 3007,
+   "name": "StudioYebisu",
+   "description": "\u30a8\u30f3\u30b8\u30cb\u30a2\u4e0a\u304c\u308a\u306e\u5143\u30b2\u30fc\u30e0\u4f1a\u793e\u30c7\u30a3\u30ec\u30af\u30bf\u30fc\n\u8a8d\u77e5\u8ca0\u8377\u4e0b\u3052\u308b\u89e3\u8aac\u304b\u3001\u30a2\u30a4\u30c7\u30a2\u4e57\u3063\u3051\u3066\u5f15\u7528\u3057\u307e\u3059\u3002\u6d77\u5916\u60c5\u5831\u591a\u3081\u3002\n\u672c\u8cea\u60c5\u5831\u3067\u9a5a\u304d\u7cfbAI\u5546\u6750\u5c4b\u3068\u30a4\u30f3\u30d7\u6226\u4e89\u4e2d\u3002\nX:\u30d7\u30edAI\u9a5a\u304b\u305b\u5c4b\u3000Note:\u6280\u8853\u7684\u306a\u8a71\u3000Cien:\u3050\u3050\u308c\n\u6700\u65b0\u6280\u8853\u3067\u3001\u53e1\u667a\u6ea2\u308c\u308b\u30b2\u30fc\u30e0\u3092\u4f5c\u308b\u4eba\n\u5049\u305d\u3046\u306a\u3053\u3068\u3092\u8a00\u3063\u3066\u3044\u3066\u3082\u3053\u3044\u3064\u306f\u4eba\u306e\u5f79\u7acb\u305f\u306a\u3044\u30e2\u30ce\u3092\u4f5c\u3063\u3066\u3044\u308b",
+   "raw_description": {
+    "text": "\u30a8\u30f3\u30b8\u30cb\u30a2\u4e0a\u304c\u308a\u306e\u5143\u30b2\u30fc\u30e0\u4f1a\u793e\u30c7\u30a3\u30ec\u30af\u30bf\u30fc\n\u8a8d\u77e5\u8ca0\u8377\u4e0b\u3052\u308b\u89e3\u8aac\u304b\u3001\u30a2\u30a4\u30c7\u30a2\u4e57\u3063\u3051\u3066\u5f15\u7528\u3057\u307e\u3059\u3002\u6d77\u5916\u60c5\u5831\u591a\u3081\u3002\n\u672c\u8cea\u60c5\u5831\u3067\u9a5a\u304d\u7cfbAI\u5546\u6750\u5c4b\u3068\u30a4\u30f3\u30d7\u6226\u4e89\u4e2d\u3002\nX:\u30d7\u30edAI\u9a5a\u304b\u305b\u5c4b\u3000Note:\u6280\u8853\u7684\u306a\u8a71\u3000Cien:\u3050\u3050\u308c\n\u6700\u65b0\u6280\u8853\u3067\u3001\u53e1\u667a\u6ea2\u308c\u308b\u30b2\u30fc\u30e0\u3092\u4f5c\u308b\u4eba\n\u5049\u305d\u3046\u306a\u3053\u3068\u3092\u8a00\u3063\u3066\u3044\u3066\u3082\u3053\u3044\u3064\u306f\u4eba\u306e\u5f79\u7acb\u305f\u306a\u3044\u30e2\u30ce\u3092\u4f5c\u3063\u3066\u3044\u308b",
+    "facets": []
+   },
+   "location": "",
+   "banner_url": "https://pbs.twimg.com/profile_banners/1957687165678497792/1785614467",
+   "avatar_url": "https://pbs.twimg.com/profile_images/2095218586046652416/pyuFtKH0_200x200.jpg",
+   "joined": "Tue Aug 19 06:12:56 +0000 2025",
+   "protected": false,
+   "website": {
+    "url": "https://note.com/studio_yebisu",
+    "display_url": "note.com/studio_yebisu"
+   },
+   "verification": {
+    "verified": true,
+    "verified_at": null,
+    "type": "individual"
+   },
+   "type": "profile"
+  },
+  "replies": 0,
+  "reposts": 0,
+  "likes": 1,
+  "bookmarks": 2,
+  "quotes": 0,
+  "embed_card": "tweet",
+  "created_at": "Wed Oct 14 00:23:04 +0000 2026",
+  "created_timestamp": 1791937384,
+  "possibly_sensitive": false,
+  "views": 302,
+  "is_note_tweet": false,
+  "community_note": null,
+  "lang": null,
+  "replying_to": {
+   "screen_name": "studio_yebisu",
+   "status": "2110164446710775839",
+   "url": "https://x.com/studio_yebisu/status/2110164446710775839",
+   "profile_url": "https://x.com/studio_yebisu"
+  },
+  "media": {},
+  "card": {
+   "url": "https://huggingface.co/fishaudio/drama-3",
+   "title": "fishaudio/drama-3 \u00b7 Hugging Face",
+   "description": "We\u2019re on a journey to advance and democratize artificial intelligence through open source and open science.",
+   "domain": "huggingface.co",
+   "image": {
+    "width": 800,
+    "height": 419,
+    "url": "https://pbs.twimg.com/card_img/2110076890979692544/WnbPFCPt?format=jpg&name=800x419"
+   }
+  },
+  "provider": "twitter",
+  "reposted_by": null
+ },
+ "thread": null,
+ "author": {
+  "screen_name": "studio_yebisu",
+  "url": "https://x.com/studio_yebisu",
+  "id": "1957687165678497792",
+  "followers": 7821,
+  "following": 129,
+  "likes": 1629,
+  "media_count": 239,
+  "statuses": 3007,
+  "name": "StudioYebisu",
+  "description": "\u30a8\u30f3\u30b8\u30cb\u30a2\u4e0a\u304c\u308a\u306e\u5143\u30b2\u30fc\u30e0\u4f1a\u793e\u30c7\u30a3\u30ec\u30af\u30bf\u30fc\n\u8a8d\u77e5\u8ca0\u8377\u4e0b\u3052\u308b\u89e3\u8aac\u304b\u3001\u30a2\u30a4\u30c7\u30a2\u4e57\u3063\u3051\u3066\u5f15\u7528\u3057\u307e\u3059\u3002\u6d77\u5916\u60c5\u5831\u591a\u3081\u3002\n\u672c\u8cea\u60c5\u5831\u3067\u9a5a\u304d\u7cfbAI\u5546\u6750\u5c4b\u3068\u30a4\u30f3\u30d7\u6226\u4e89\u4e2d\u3002\nX:\u30d7\u30edAI\u9a5a\u304b\u305b\u5c4b\u3000Note:\u6280\u8853\u7684\u306a\u8a71\u3000Cien:\u3050\u3050\u308c\n\u6700\u65b0\u6280\u8853\u3067\u3001\u53e1\u667a\u6ea2\u308c\u308b\u30b2\u30fc\u30e0\u3092\u4f5c\u308b\u4eba\n\u5049\u305d\u3046\u306a\u3053\u3068\u3092\u8a00\u3063\u3066\u3044\u3066\u3082\u3053\u3044\u3064\u306f\u4eba\u306e\u5f79\u7acb\u305f\u306a\u3044\u30e2\u30ce\u3092\u4f5c\u3063\u3066\u3044\u308b",
+  "raw_description": {
+   "text": "\u30a8\u30f3\u30b8\u30cb\u30a2\u4e0a\u304c\u308a\u306e\u5143\u30b2\u30fc\u30e0\u4f1a\u793e\u30c7\u30a3\u30ec\u30af\u30bf\u30fc\n\u8a8d\u77e5\u8ca0\u8377\u4e0b\u3052\u308b\u89e3\u8aac\u304b\u3001\u30a2\u30a4\u30c7\u30a2\u4e57\u3063\u3051\u3066\u5f15\u7528\u3057\u307e\u3059\u3002\u6d77\u5916\u60c5\u5831\u591a\u3081\u3002\n\u672c\u8cea\u60c5\u5831\u3067\u9a5a\u304d\u7cfbAI\u5546\u6750\u5c4b\u3068\u30a4\u30f3\u30d7\u6226\u4e89\u4e2d\u3002\nX:\u30d7\u30edAI\u9a5a\u304b\u305b\u5c4b\u3000Note:\u6280\u8853\u7684\u306a\u8a71\u3000Cien:\u3050\u3050\u308c\n\u6700\u65b0\u6280\u8853\u3067\u3001\u53e1\u667a\u6ea2\u308c\u308b\u30b2\u30fc\u30e0\u3092\u4f5c\u308b\u4eba\n\u5049\u305d\u3046\u306a\u3053\u3068\u3092\u8a00\u3063\u3066\u3044\u3066\u3082\u3053\u3044\u3064\u306f\u4eba\u306e\u5f79\u7acb\u305f\u306a\u3044\u30e2\u30ce\u3092\u4f5c\u3063\u3066\u3044\u308b",
+   "facets": []
+  },
+  "location": "",
+  "banner_url": "https://pbs.twimg.com/profile_banners/1957687165678497792/1785614467",
+  "avatar_url": "https://pbs.twimg.com/profile_images/2095218586046652416/pyuFtKH0_200x200.jpg",
+  "joined": "Tue Aug 19 06:12:56 +0000 2025",
+  "protected": false,
+  "website": {
+   "url": "https://note.com/studio_yebisu",
+   "display_url": "note.com/studio_yebisu"
+  },
+  "verification": {
+   "verified": true,
+   "verified_at": null,
+   "type": "individual"
+  },
+  "type": "profile"
+ },
+ "code": 200
+}
