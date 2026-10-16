@@ -14,8 +14,9 @@
  * --archive-only (launchd, every 20 min) only archiving runs: no AI, no analysis files.
  *
  * Related capture (parents, quotes, self replies, github/HF/arXiv/web resources) runs right after archiving.
- * --reanalyze-related re-analyzes the links that have related.json but no analysis.primary_subject yet, and the
- * links whose related.json gained supplement resources (profile website / x search, v3.1) after their analysis.
+ * --reanalyze-related re-analyzes the links that have related.json but no analysis.primary_subject yet, the
+ * links whose related.json gained supplement resources (profile website / replies) after their analysis, and the
+ * links with captured replies (related/x-replies.json) that the analysis has not seen yet.
  *
  * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--reanalyze-related] [--data <dir>] [--max <n>]
  */
@@ -61,7 +62,7 @@ const CONFIG = {
 
 // ---------- logging ----------
 
-const logDir = path.join(HERE, 'logs');
+const logDir = process.env.LV_LOG_DIR || path.join(HERE, 'logs'); // tests set LV_LOG_DIR to a temp dir
 fssync.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, `${new Date().toISOString().slice(0, 7)}.log`);
 function log(...a) {
@@ -357,7 +358,10 @@ async function main() {
     const relatedIds = new Map();
     if (CONFIG.reanalyzeRelated) for (const r of records) {
       const f = path.join(dir, 'archive', r.id.slice(0, 4), r.id, 'related.json');
-      if (fssync.existsSync(f)) relatedIds.set(r.id, (await readJson(f, null))?.supplement?.resources_added_at || null);
+      if (fssync.existsSync(f)) {
+        const xr = await readJson(path.join(path.dirname(f), 'related', 'x-replies.json'), null); // other people's replies (v3.2)
+        relatedIds.set(r.id, { added: (await readJson(f, null))?.supplement?.resources_added_at || null, repliesN: xr?.replies?.length || 0, repliesAt: xr?.captured_at || null });
+      }
     }
     const todo = CONFIG.archiveOnly ? [] : records.filter((r) => {
       const a = analyses.get(r.id);
@@ -365,8 +369,11 @@ async function main() {
       if (!a) return true;
       if (CONFIG.reanalyzeRelated && a.status === 'analyzed' && relatedIds.has(r.id)) {
         if (!a.primary_subject) return true;
-        const added = Date.parse(relatedIds.get(r.id) || '');
-        if (added && added > (Date.parse(a.analyzed_at) || 0)) return true; // supplement resources the AI has not seen
+        const rel = relatedIds.get(r.id);
+        const seenAt = Date.parse(a.analyzed_at) || 0;
+        const added = Date.parse(rel.added || '');
+        if (added && added > seenAt) return true; // supplement resources the AI has not seen
+        if (rel.repliesN && (a.related_used?.replies === undefined || Date.parse(rel.repliesAt || '') > seenAt)) return true; // replies the AI has not seen
       }
       if (a.status !== 'failed') return false;
       return (a.attempts || 0) < MAX_ATTEMPTS || Date.now() - new Date(a.analyzed_at).getTime() > DAY_MS;
@@ -408,7 +415,7 @@ async function main() {
                 final_url: content.final_url || null,
                 fetch_error: content.ok ? null : content.error,
               },
-              ...(content.related ? { related_used: { posts: content.related.posts.length, resources: content.related.resources.length }, primary_rule: content.related.primary } : {}),
+              ...(content.related ? { related_used: { posts: content.related.posts.length, resources: content.related.resources.length, replies: content.related.replies.length }, primary_rule: content.related.primary } : {}),
               model,
             };
             analyses.set(r.id, a);

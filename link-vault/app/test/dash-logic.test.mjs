@@ -76,3 +76,24 @@ test('subject filter + facets + labels', () => {
   assert.equal(DL.subjectLabel('https://huggingface.co/datasets/o/d'), 'o/d');
   assert.equal(DL.parseHash(DL.buildHash({ sub: 'r' })).sub, 'r');
 });
+
+test('relatedView: other people\'s replies get the resource chips they link to', () => {
+  const rel = {
+    posts: [{ sid: 's', role: 'self', depth: 0, author: '@a', text: 'x' }],
+    resources: [{ n: 1, url: 'https://github.com/o/r', type: 'github', key: 'o/r', found_in: [], origin: 'x_replies' }, { n: 2, url: 'https://x.org/', type: 'web', found_in: [] }],
+    primary: { kind: 'resource', n: 1 },
+  };
+  const doc = { replies: [
+    { n: 1, handle: '@bob', text: 'try this', own: false, links: ['https://www.github.com/o/r/'] },
+    { n: 2, handle: '@eve', text: 'no link', own: false, links: [] },
+    { n: 3, handle: '@a', text: 'deep', own: true, links: ['https://github.com/o/r/tree/main'] },
+  ] };
+  const v = DL.relatedView(rel, null, doc);
+  assert.equal(v.replies.length, 3);
+  assert.deepEqual(v.replies[0].resources.map((r) => r.n), [1]);
+  assert.deepEqual(v.replies[1].resources, []);
+  assert.deepEqual(v.replies[2].resources.map((r) => r.n), [1]);
+  assert.equal(v.counts.replies, 3);
+  assert.equal(DL.relatedView(rel).replies.length, 0); // no replies doc
+  assert.equal(DL.relatedView({ ...rel, resources: [] }, null, doc).hasContext, true);
+});

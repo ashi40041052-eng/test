@@ -235,6 +235,9 @@
     if (!relCache.has(id)) relCache.set(id, read(LV.archiveDir(id) + 'related.json', 'json').catch(() => null));
     return relCache.get(id);
   }
+  function loadReplies(id) { // other people's replies; absent for most links
+    return read(LV.archiveDir(id) + 'related/x-replies.json', 'json').catch(() => null);
+  }
   const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('ja-JP'));
   function resFacts(r, m) { // one-line facts from the resource meta json
     if (!m) return '';
@@ -247,7 +250,7 @@
   }
   function resName(r, m) { return (m && (m.full_name || m.id || m.title)) || r.key || shortUrl(r.url); }
   // v3.1 supplements carry an origin: the author's profile website or a link found in other people's replies (x search)
-  function originLabel(r) { return !r.origin ? '' : r.origin === 'x_search' ? 'リプ欄(検索)' : r.origin.indexOf('profile:') === 0 ? 'プロフィール ' + r.origin.slice(8) : r.origin; }
+  function originLabel(r) { return !r.origin ? '' : r.origin === "x_replies" ? "他人のリプ" : r.origin === "x_replies_self" ? "本人のリプ" : r.origin.indexOf('profile:') === 0 ? 'プロフィール ' + r.origin.slice(8) : r.origin; }
   function miniRes(r) {
     const pi = DL.pkInfo(r.pk);
     const o = originLabel(r);
@@ -261,11 +264,19 @@
       (p.quote ? postHtml(Object.assign({}, p.quote, { quote: null, resources: [] }), true) : '') +
       (p.resources && p.resources.length ? '<div class="tr">' + p.resources.map(miniRes).join(' ') + '</div>' : '') + '</div>';
   }
+  function replyHtml(r) {
+    return '<div class="tpost reply' + (r.own ? ' self_reply' : '') + '">' +
+      '<div class="th"><span class="role">' + (r.own ? '本人' : 'リプ') + '</span> <b>' + esc(r.handle || '') + '</b>' + (r.name && r.name !== r.handle ? ' <span class="muted">' + esc(r.name) + '</span>' : '') + (r.time ? ' <span class="muted">' + esc(fmtDate(r.time, true)) + '</span>' : '') + '</div>' +
+      '<div class="tt">' + esc(r.text || '') + '</div>' +
+      (r.resources && r.resources.length ? '<div class="tr">' + r.resources.map(miniRes).join(' ') + '</div>' : '') + '</div>';
+  }
   async function renderRelated(id) {
     const rel = await loadRelated(id);
     if (state.sel !== id) return;
     const it = state.index && state.index.items.find((x) => x.id === id);
-    const v = DL.relatedView(rel, it && it.primary_subject);
+    const repliesDoc = rel ? await loadReplies(id) : null;
+    if (state.sel !== id) return;
+    const v = DL.relatedView(rel, it && it.primary_subject, repliesDoc);
     const sb = $('#subjBox'), tb = $('#thrBox');
     if (!v || !sb || !tb) return;
     const dir = LV.archiveDir(id);
@@ -284,6 +295,9 @@
     }
     if (v.thread.length > 1 || v.thread.some((p) => p.quote)) {
       tb.innerHTML = '<h4>スレッド（親 → 保存ポスト → 本人の続き）</h4><div class="thread">' + v.thread.map((p) => postHtml(p)).join('') + '</div>';
+    }
+    if (v.replies.length) {
+      tb.innerHTML += '<h4>他の人のリプ（' + v.replies.length + '件）</h4><div class="thread">' + v.replies.map(replyHtml).join('') + '</div>';
     }
     const others = v.resources.filter((r) => !(v.primary && v.primary.resource && v.primary.resource.n === r.n));
     if (others.length) tb.innerHTML += '<h4>その他のリソース</h4><div class="tr">' + others.map(miniRes).join(' ') + '</div>';

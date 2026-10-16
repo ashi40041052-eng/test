@@ -1,6 +1,6 @@
 /*
  * Other people's replies on X, read with the user's OWN logged-in Chrome through bsk (browser-skill CLI)
- * (DESIGN-v3.md addendum "v3.2"). Replaces Grok X search as the default replies source.
+ * (DESIGN-v3.md addendum "v3.2"). 
  * The browser is behind a tiny driver interface so tests never start one:
  *   driver.loadThread(url, { maxScrolls, delay }) -> { finalUrl, snapshots: [html, ...] }   (page HTML after load / each scroll)
  * Credentials and cookie values are never read, logged or stored.
@@ -13,17 +13,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson } from './util.mjs';
 import { classifyUrl } from './related.mjs';
-import { xsearchTrigger } from './related-extra.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DAY_MS = 24 * 3600 * 1000;
 export const MAX_REPLIES = 30;
 export const MAX_URLS = 8;
 const MAX_ATTEMPTS = 3;
 const MAX_HEADS = 12; // t.co HEAD resolves per capture
 
-const loginFile = () => process.env.LV_XREPLIES_LOGIN_FILE || path.join(HERE, '..', 'logs', 'x-login-required.json');
-const lockFile = () => process.env.LV_XREPLIES_LOCK_FILE || path.join(HERE, '..', 'logs', 'x-browser.lock');
+const logDir = () => process.env.LV_LOG_DIR || path.join(HERE, '..', 'logs');
+const loginFile = () => process.env.LV_XREPLIES_LOGIN_FILE || path.join(logDir(), 'x-login-required.json');
+const lockFile = () => process.env.LV_XREPLIES_LOCK_FILE || path.join(logDir(), 'x-browser.lock');
 export const perRun = () => Number(process.env.LV_XREPLIES_PER_RUN ?? 4);
 
 let driver = null; // tests inject one; production lazily builds the bsk driver
@@ -152,21 +151,11 @@ async function withLock(fn) {
 // ---------- trigger ----------
 
 /*
- * Same rules as the Grok x_search triggers ('replies' | 'tool'), plus 'recent': saved within 7 days and the
- * primary subject is not a resource. Pure.
+ * Every X link is checked once (the per-run budget still applies): replies may hold the real subject even when the
+ * saved post already links a resource. LV_XREPLIES_FORCE=1 only changes the reported reason. Pure.
  */
-export function xrepliesTrigger(posts, resources, { primary, savedAt, now = new Date() } = {}) {
-  if (process.env.LV_XREPLIES_FORCE === '1') return 'forced';
-  const t = xsearchTriggerNoForce(posts, resources);
-  if (t) return t;
-  const saved = Date.parse(savedAt || '');
-  if (saved && now.getTime() - saved <= 7 * DAY_MS && primary?.kind !== 'resource') return 'recent';
-  return null;
-}
-function xsearchTriggerNoForce(posts, resources) {
-  const prev = process.env.LV_XSEARCH_FORCE;
-  delete process.env.LV_XSEARCH_FORCE;
-  try { return xsearchTrigger(posts, resources); } finally { if (prev !== undefined) process.env.LV_XSEARCH_FORCE = prev; }
+export function xrepliesTrigger() {
+  return process.env.LV_XREPLIES_FORCE === '1' ? 'forced' : 'every';
 }
 
 // ---------- capture ----------
@@ -176,7 +165,7 @@ function xsearchTriggerNoForce(posts, resources) {
  * Archive file (create-only): <archive>/<y>/<id>/related/x-replies.json
  *   { schema:1, id, status_url, sid, captured_at, main:{handle,name}|null, truncated:bool,
  *     replies:[{ n, handle, name, text, time, permalink, own:bool, links:[url] }],   // max 30, other people's replies + the author's own
- *     urls:[{ url, own }] }                                                           // unique outbound links, own = author's own reply
+ *     urls:[{ url, own, count }] }                                                           // unique outbound links, own = author's own reply, count = replies containing it
  */
 export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget, now = new Date(), log = () => {} }) {
   const file = path.join(relatedRoot, 'related', 'x-replies.json');
@@ -215,7 +204,7 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget,
       for (const u of links) {
         if (!classifyUrl(u)) continue;
         const prev = urls.find((x) => x.url === u);
-        if (prev) prev.own = prev.own || own; else urls.push({ url: u, own });
+        if (prev) { prev.own = prev.own || own; prev.count++; } else urls.push({ url: u, own, count: 1 });
       }
     }
     urls.sort((a, b) => Number(b.own) - Number(a.own));

@@ -110,7 +110,21 @@
   // Pure view of related.json: thread order (farthest parent -> parents -> self -> self replies),
   // quotes nested under the post they quote, resources attached to the posts they were found in,
   // and the primary subject. aiPrimary ({kind,url,name}) from analysis wins over the rule-based primary.
-  function relatedView(rel, aiPrimary) {
+  // normalized url for matching a reply link against a resource (scheme / www / trailing slash / case ignored)
+  const normUrl = (u) => String(u || '').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[#?].*$/, '').replace(/\/+$/, '');
+
+  // Other people's replies (related/x-replies.json): each reply gets the resource chips whose url it links to.
+  function repliesView(doc, resources, max) {
+    if (!doc || !Array.isArray(doc.replies)) return [];
+    return doc.replies.slice(0, max || 30).map((r) => {
+      const links = (r.links || []).map(normUrl);
+      return Object.assign({}, r, {
+        resources: resources.filter((x) => links.some((l) => l === normUrl(x.url) || l.indexOf(normUrl(x.url) + '/') === 0)),
+      });
+    });
+  }
+
+  function relatedView(rel, aiPrimary, repliesDoc) {
     if (!rel || !Array.isArray(rel.posts) || !rel.posts.length) return null;
     const resources = (rel.resources || []).map((r) => Object.assign({}, r, { pk: TYPE_PK[r.type] || 's' }));
     const quotes = new Map();
@@ -142,7 +156,8 @@
       if (p) primary = { kind: 'post', post: view(p), reason: pr.reason || '' };
     }
     const pk = primary ? (primary.kind === 'resource' ? primary.resource.pk : 'x') : '-';
-    return { thread, resources, primary, pk, hasContext: thread.length > 1 || resources.length > 0, counts: { posts: rel.posts.length, resources: resources.length } };
+    const others = repliesView(repliesDoc, resources);
+    return { thread, resources, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
   }
 
   g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia };

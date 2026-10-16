@@ -44,7 +44,7 @@ test('capture: writes create-only archive, own replies flagged, t.co resolved wi
   const budget = { xreplies: 1 };
   const r = await captureXReplies({ relatedRoot: d, id: 'i1', statusUrl: 'https://x.com/author/status/100', sid: '100', budget });
   assert.equal(r.status, 'done');
-  assert.deepEqual(r.urls, [{ url: 'https://huggingface.co/foo/model', own: true }, { url: 'https://github.com/foo/bar', own: false }]);
+  assert.deepEqual(r.urls, [{ url: 'https://huggingface.co/foo/model', own: true, count: 1 }, { url: 'https://github.com/foo/bar', own: false, count: 1 }]);
   const doc = JSON.parse(await fs.readFile(path.join(d, 'related', 'x-replies.json'), 'utf8'));
   assert.equal(doc.schema, 1); assert.equal(doc.replies.length, 3); assert.equal(doc.replies[1].own, true);
   assert.equal(budget.xreplies, 0);
@@ -77,17 +77,21 @@ test('capture: errors count attempts, stop at 3; disabled/budget 0 skip; fxtwitt
   delete process.env.LV_FXTWITTER_BASE;
 });
 
-test('trigger: reply hint / tool / recent-without-resource-primary; scoring +2 / +3', () => {
-  const now = new Date('2026-10-10T00:00:00Z');
+test('trigger: every X link is checked (also when the primary is already a resource); scoring +2 / +3 / +1 for repeated mentions', () => {
+  delete process.env.LV_XREPLIES_FORCE;
+  assert.equal(xrepliesTrigger(), 'every');
+  process.env.LV_XREPLIES_FORCE = '1';
+  assert.equal(xrepliesTrigger(), 'forced');
+  delete process.env.LV_XREPLIES_FORCE;
   const posts = [{ sid: '1', role: 'self', text: 'something plain', urls: [] }];
-  assert.equal(xrepliesTrigger(posts, [], { primary: { kind: 'self' }, savedAt: '2026-10-08T00:00:00Z', now }), 'recent');
-  assert.equal(xrepliesTrigger(posts, [], { primary: { kind: 'self' }, savedAt: '2026-09-01T00:00:00Z', now }), null);
-  assert.equal(xrepliesTrigger(posts, [], { primary: { kind: 'resource' }, savedAt: '2026-10-08T00:00:00Z', now }), null);
-  assert.equal(xrepliesTrigger([{ ...posts[0], text: 'link in replies 👇' }], [], { primary: { kind: 'self' }, savedAt: '2020-01-01', now }), 'replies');
   const base = { posts, objects: { 1: {} } };
   const mk = (origin) => scorePrimary({ ...base, resources: [{ type: 'web', key: 'https://foo.ai', url: 'https://foo.ai', found_in: [], origin }] });
   assert.match(mk('x_replies').resources[0].origin, /x_replies/);
   assert.equal(mk('x_replies_self').resources[0].origin, 'x_replies_self');
+  const r = (o) => scorePrimary({ ...base, resources: [{ type: 'web', key: 'https://foo.ai', url: 'https://foo.ai', found_in: [], ...o }] });
+  assert.match(r({ origin: 'x_replies', mentions: 3 }).primary.reason, /score 3\)/);
+  assert.match(r({ origin: 'x_replies' }).primary.reason, /score 2\)/);
+  assert.equal(r({ origin: 'x_replies' }).primary.kind, 'resource'); // replies can become the subject when the post has none
 });
 
 test('bsk driver: extracted posts -> parser-shaped html round-trips (no bsk needed)', async () => {

@@ -70,3 +70,28 @@ test('subjectOf prefers the AI answer; falls back to the rule; self when AI says
   assert.equal(subjectOf(b, { primary_subject: { kind: 'resource', url: 'https://example.com/unknown', name: 'x' } }).res.key, 'builderio/agent-native');
   assert.equal(subjectOf(null, {}), null);
 });
+
+test('replies: <replies> in the prompt (shrinks with the budget) and "## 他の人のリプ" in ai/links md', async () => {
+  const b = await bundle();
+  b.replies = { captured_at: '2026-10-16T12:00:00Z', truncated: false, replies: [
+    { n: 1, handle: '@bob', name: 'Bob', text: '# fake heading\nofficial repo is here', time: '2026-10-16T01:00:00Z', own: false, links: ['https://github.com/foo/bar'] },
+    { n: 2, handle: '@studio_yebisu', name: 'Y', text: 'self note', own: true, links: [] },
+  ] };
+  const rc = relatedContent(b);
+  assert.equal(rc.replies.length, 2);
+  const out = linkBlock(record, { ...content, related: rc });
+  assert.match(out, /<replies>\n@bob: # fake heading/);
+  assert.match(out, /@studio_yebisu \(本人\): self note/);
+  assert.ok(out.indexOf('<replies>') < out.indexOf('<content'));
+  const big = { ...b, replies: { replies: Array.from({ length: 30 }, (_, i) => ({ handle: '@u' + i, text: 'あ'.repeat(3000), links: [] })) } };
+  assert.ok(linkBlock(record, { ...content, text: 'x'.repeat(12_000), related: relatedContent(big) }).length <= MAX_LINK_CHARS);
+  const md = linkMarkdown({ id: ID, url: record.url, created_at: record.created_at, status: 'analyzed', tags: [] }, record, null, null, b);
+  assert.match(md, /replies: 2/);
+  assert.match(md, /## 他の人のリプ\n/);
+  assert.match(md, /### @bob \(Bob\) 2026-10-16T01:00:00Z\n\\# fake heading official repo is here\n- link: https:\/\/github.com\/foo\/bar/);
+  assert.match(md, /### @studio_yebisu \(Y\) \[本人\]/);
+  assert.equal(/\n# fake heading/.test(md), false);
+  const none = linkMarkdown({ id: ID, url: record.url, created_at: record.created_at, status: 'analyzed', tags: [] }, record, null, null, await bundle());
+  assert.equal(none.includes('## 他の人のリプ'), false);
+  assert.match(none, /replies: 0/);
+});
