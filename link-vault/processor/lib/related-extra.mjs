@@ -96,7 +96,7 @@ export async function fetchProfileSites(handle, log = () => {}) {
 const REPLY_HINT = /リプ|リプライ|コメント欄|返信|👇|\bbelow\b|in (?:the )?replies|link in (?:the )?reply|\bcomments?\b/i;
 const TOOL_HINT = /ツール|アプリ|サービス|モデル|リリース|公開|発表|オープン(?:ウェイト|ソース)|\bintroducing\b|\blaunch|\bapp\b|\btool\b|\bmodel\b|\bAPI\b|\bSDK\b|open[- ]?(?:source|weights?)|\bbeta\b|\bv\d+(?:\.\d+)?\b/i;
 
-export const xsearchEnabled = () => process.env.LV_XSEARCH !== '0';
+export const xsearchEnabled = () => process.env.LV_XSEARCH === '1'; // off by default: Grok is only used when explicitly enabled
 // Tests that point fxtwitter at a double must also point LV_GROK_BIN at a fake; otherwise never run the real one.
 export const xsearchAllowed = () => xsearchEnabled() && !(process.env.LV_FXTWITTER_BASE && !process.env.LV_GROK_BIN);
 const grokBin = () => process.env.LV_GROK_BIN || 'grok-api';
