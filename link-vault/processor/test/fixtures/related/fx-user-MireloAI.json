@@ -1,0 +1,34 @@
+{
+ "code": 200,
+ "message": "OK",
+ "user": {
+  "screen_name": "MireloAI",
+  "url": "https://x.com/MireloAI",
+  "id": "1805846134499557378",
+  "followers": 5393,
+  "following": 226,
+  "likes": 1351,
+  "media_count": 171,
+  "tweets": 1157,
+  "name": "Mirelo",
+  "description": "Generate and Design the Sound Effects your Videos Deserve in Seconds\ud83c\udfb5",
+  "raw_description": {
+   "text": "Generate and Design the Sound Effects your Videos Deserve in Seconds\ud83c\udfb5",
+   "facets": []
+  },
+  "location": "",
+  "banner_url": "https://pbs.twimg.com/profile_banners/1805846134499557378/1791984994",
+  "avatar_url": "https://pbs.twimg.com/profile_images/2056684878804987904/SKxWDUAT_normal.jpg",
+  "joined": "Wed Jun 26 06:11:13 +0000 2024",
+  "protected": false,
+  "website": {
+   "url": "https://linktr.ee/mirelo.ai",
+   "display_url": "linktr.ee/mirelo.ai"
+  },
+  "verification": {
+   "verified": true,
+   "verified_at": null,
+   "type": "organization"
+  }
+ }
+}

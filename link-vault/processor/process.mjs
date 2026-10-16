@@ -14,7 +14,8 @@
  * --archive-only (launchd, every 20 min) only archiving runs: no AI, no analysis files.
  *
  * Related capture (parents, quotes, self replies, github/HF/arXiv/web resources) runs right after archiving.
- * --reanalyze-related re-analyzes the links that have related.json but no analysis.primary_subject yet.
+ * --reanalyze-related re-analyzes the links that have related.json but no analysis.primary_subject yet, and the
+ * links whose related.json gained supplement resources (profile website / x search, v3.1) after their analysis.
  *
  * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--reanalyze-related] [--data <dir>] [--max <n>]
  */
@@ -183,7 +184,7 @@ async function ensureLayout(dir) {
       '',
       '- `links/` … スマホから保存された元データ（1リンク1ファイル・追記のみ・絶対に編集/削除しない）',
       '- `analysis/` … AIによる分析結果（再生成可能）',
-      '- `archive/` … 各リンクの本文・画像のスナップショット（作成後は絶対に上書きしない）',
+      '- `archive/` … 各リンクの本文・画像のスナップショット（作成後は絶対に上書きしない。related.json だけは資源の追記あり＝既存の項目は変えない）',
       '- `ai/` … AI向けの入口（`ai/llms.txt` から読む。自動生成）',
       '- `categories.json` … カテゴリ一覧（名前・説明は手で編集してOK）',
       '- `index.json` … ダッシュボード用（自動生成）',
@@ -352,13 +353,21 @@ async function main() {
       log(`related: created=${rStats.created} filled=${rStats.filled} failed=${rStats.failed} resources_fetched=${40 - rBudget.resources}`);
     }
 
-    const relatedIds = new Set();
-    if (CONFIG.reanalyzeRelated) for (const r of records) if (fssync.existsSync(path.join(dir, 'archive', r.id.slice(0, 4), r.id, 'related.json'))) relatedIds.add(r.id);
+    // id -> when related.json last gained supplement resources (v3.1), or null; only for links that have related.json
+    const relatedIds = new Map();
+    if (CONFIG.reanalyzeRelated) for (const r of records) {
+      const f = path.join(dir, 'archive', r.id.slice(0, 4), r.id, 'related.json');
+      if (fssync.existsSync(f)) relatedIds.set(r.id, (await readJson(f, null))?.supplement?.resources_added_at || null);
+    }
     const todo = CONFIG.archiveOnly ? [] : records.filter((r) => {
       const a = analyses.get(r.id);
       if (deleted.has(r.id)) return false; // don't spend AI on deleted links
       if (!a) return true;
-      if (CONFIG.reanalyzeRelated && a.status === 'analyzed' && !a.primary_subject && relatedIds.has(r.id)) return true;
+      if (CONFIG.reanalyzeRelated && a.status === 'analyzed' && relatedIds.has(r.id)) {
+        if (!a.primary_subject) return true;
+        const added = Date.parse(relatedIds.get(r.id) || '');
+        if (added && added > (Date.parse(a.analyzed_at) || 0)) return true; // supplement resources the AI has not seen
+      }
       if (a.status !== 'failed') return false;
       return (a.attempts || 0) < MAX_ATTEMPTS || Date.now() - new Date(a.analyzed_at).getTime() > DAY_MS;
     });

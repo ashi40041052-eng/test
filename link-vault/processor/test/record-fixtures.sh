@@ -18,3 +18,7 @@ curl -fsS https://huggingface.co/api/models/fishaudio/drama-3 > "$D/hf-model-dra
 curl -fsS https://huggingface.co/fishaudio/drama-3/raw/main/README.md > "$D/hf-readme-drama-3.md"
 curl -fsS "https://export.arxiv.org/api/query?id_list=1706.03762" > "$D/arxiv-query-sample.xml"
 curl -fsS "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ&format=json" > "$D/yt-oembed-sample.json"
+# v3.1 supplements: author profile (website fallback) and a link hub page
+curl -fsS https://api.fxtwitter.com/MireloAI | python3 -m json.tool --indent 1 > "$D/fx-user-MireloAI.json"
+curl -fsS https://api.fxtwitter.com/bfl_ai | python3 -m json.tool --indent 1 > "$D/fx-user-bfl_ai.json"
+# hub-linktree-mirelo.html is the anchor tags of https://linktr.ee/mirelo.ai (trimmed by hand from curl -L -A Mozilla/5.0)
