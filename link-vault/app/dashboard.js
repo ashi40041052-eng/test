@@ -6,6 +6,9 @@
   const LV = self.LV, DL = self.DashLogic;
   const $ = (s) => document.querySelector(s);
   const MOCK = new URLSearchParams(location.search).get('mock') === '1';
+  // Local mode: served by processor/dashboard-server.mjs on this Mac; reads the cloned data repo, no token needed.
+  const LOCAL = !MOCK && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  const FILE_BASE = MOCK ? 'fixtures/mock/' : LOCAL ? '/data/' : null;
   const DAY_MS = 86400000;
   const state = { index: null, manifest: new Map(), filters: {}, sel: null, view: [], events: new Map(), cfg: null };
   const urlCache = new Map(); // path -> object URL (this page load)
@@ -33,8 +36,8 @@
   // ---------- data layer ----------
   const CACHE_TTL = DAY_MS;
   async function read(path, kind, fresh) { // kind: json | text | blob. Resolves null when missing. fresh: skip the 1-day cache.
-    if (MOCK) {
-      const r = await fetch('fixtures/mock/' + path);
+    if (FILE_BASE) {
+      const r = await fetch(FILE_BASE + path, { cache: 'no-store' });
       if (!r.ok) return null;
       return kind === 'json' ? r.json() : kind === 'blob' ? r.blob() : r.text();
     }
@@ -67,7 +70,7 @@
   }
 
   async function loadAll(network) {
-    if (MOCK) {
+    if (FILE_BASE) {
       state.index = await read('index.json', 'json');
       state.events = new Map();
     } else {
@@ -242,6 +245,7 @@
   async function toggleTrash(id) {
     const it = state.index.items.find((x) => x.id === id);
     if (!it) return;
+    if (LOCAL) { toast('このPC表示は読み取り専用です。削除はスマホか GitHub Pages 版から'); return; }
     const next = !isDeleted(id, it);
     const idx = state.view.findIndex((x) => x.id === id);
     if (MOCK) state.events.set(id, { target: id, action: next ? 'delete' : 'restore', at: new Date().toISOString(), synced_at: null });
