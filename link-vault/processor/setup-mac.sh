@@ -147,16 +147,39 @@ if [ "$OS" = "Darwin" ]; then
   launchctl bootstrap "gui/$(id -u)" "$PLIST"
   info "登録しました（スリープ中だった分は、起きたときに実行されます）"
   info "止めたいとき: launchctl bootout gui/$(id -u)/$LABEL"
+
+  # archive-only job: every 20 minutes, no AI (saves post text + images). Rewritten and reloaded each time (idempotent).
+  ALABEL="com.linkvault.archive"
+  APLIST="$HOME/Library/LaunchAgents/$ALABEL.plist"
+  {
+    echo '<?xml version="1.0" encoding="UTF-8"?>'
+    echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+    echo '<plist version="1.0"><dict>'
+    echo "  <key>Label</key><string>$ALABEL</string>"
+    echo "  <key>ProgramArguments</key><array><string>$NODE_BIN</string><string>$PROC_DIR/process.mjs</string><string>--archive-only</string></array>"
+    echo "  <key>WorkingDirectory</key><string>$PROC_DIR</string>"
+    echo "  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$RUN_PATH</string></dict>"
+    echo "  <key>StandardOutPath</key><string>$PROC_DIR/logs/launchd-archive.log</string>"
+    echo "  <key>StandardErrorPath</key><string>$PROC_DIR/logs/launchd-archive.log</string>"
+    echo '  <key>StartInterval</key><integer>1200</integer>'
+    echo '  <key>RunAtLoad</key><true/>'
+    echo '</dict></plist>'
+  } > "$APLIST"
+  launchctl bootout "gui/$(id -u)/$ALABEL" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$APLIST"
+  info "20分ごとの保存（アーカイブ）も登録しました。止めたいとき: launchctl bootout gui/$(id -u)/$ALABEL"
 else
   have crontab || fail "crontab がありません。cron をインストールしてから再実行してください"
   MARK="# link-vault-processor"
   LINE="0 ${HOURS// /,} * * * cd \"$PROC_DIR\" && PATH=\"$RUN_PATH\" \"$NODE_BIN\" process.mjs >> \"$PROC_DIR/logs/cron.log\" 2>&1 $MARK"
   mkdir -p "$PROC_DIR/logs"
-  { crontab -l 2>/dev/null | grep -v "$MARK" || true; echo "$LINE"; } | crontab -
-  info "cron に登録しました"
+  AMARK="# link-vault-archive"
+  ALINE="*/20 * * * * cd \"$PROC_DIR\" && PATH=\"$RUN_PATH\" \"$NODE_BIN\" process.mjs --archive-only >> \"$PROC_DIR/logs/cron-archive.log\" 2>&1 $AMARK"
+  { crontab -l 2>/dev/null | grep -v "$MARK" | grep -v "$AMARK" || true; echo "$LINE"; echo "$ALINE"; } | crontab -
+  info "cron に登録しました（分析は1日の指定時刻、保存は20分ごと）"
 fi
 
 printf '\n\033[1;32m✓ セットアップ完了！\033[0m\n'
-info "スマホで保存したリンクは ${HOURS// /時・}時 に自動で分析されます。"
+info "スマホで保存したリンクは、約20分ごとに本文・画像が保存され、${HOURS// /時・}時 に自動で分析されます。"
 info "今すぐ分析したいとき: cd \"$PROC_DIR\" && node process.mjs"
 info "ログ: $PROC_DIR/logs/"

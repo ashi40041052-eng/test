@@ -153,7 +153,12 @@ function Install-LinkVault {
     -RunOnlyIfNetworkAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Settings $settings `
     -Description 'Link Vault: analyze and categorize saved links' -Force | Out-Null
-  Info 'タスクスケジューラに登録しました（PCが切れていた分は、次に起動したときに実行されます）'
+  # archive-only task: every 20 minutes, no AI
+  $aAction = New-ScheduledTaskAction -Execute $node -Argument "`"$procDir\process.mjs`" --archive-only" -WorkingDirectory $procDir
+  $aTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 20) -RepetitionDuration (New-TimeSpan -Days 3650)
+  Register-ScheduledTask -TaskName "$($taskName)Archive" -Action $aAction -Trigger $aTrigger -Settings $settings `
+    -Description 'Link Vault: archive saved links (every 20 min)' -Force | Out-Null
+  Info 'タスクスケジューラに登録しました（PCが切れていた分は、次に起動したときに実行されます。保存は20分ごと）'
 
   Write-Host ''
   Write-Host 'v セットアップ完了！' -ForegroundColor Green

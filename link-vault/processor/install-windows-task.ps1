@@ -21,7 +21,13 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings `
   -Description "Link Vault: analyze and categorize saved links" -Force | Out-Null
 
+# archive-only task: every 20 minutes, no AI (saves post text and images)
+$aAction = New-ScheduledTaskAction -Execute $node -Argument "`"$here\process.mjs`" --archive-only" -WorkingDirectory $here
+$aTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 20) -RepetitionDuration (New-TimeSpan -Days 3650)
+Register-ScheduledTask -TaskName "${TaskName}Archive" -Action $aAction -Trigger $aTrigger -Settings $settings `
+  -Description "Link Vault: archive saved links (every 20 min)" -Force | Out-Null
+
 Write-Host "Registered '$TaskName' at: $($Times -join ', ')"
 Write-Host "Run now:   Start-ScheduledTask -TaskName $TaskName"
 Write-Host "Logs:      $here\logs\"
-Write-Host "Remove:    Unregister-ScheduledTask -TaskName $TaskName -Confirm:`$false"
+Write-Host "Remove:    Unregister-ScheduledTask -TaskName $TaskName, ${TaskName}Archive -Confirm:`$false"
