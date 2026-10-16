@@ -1,0 +1,15 @@
+{
+ "id": "fishaudio/drama-3",
+ "pipeline_tag": "text-to-speech",
+ "tags": [
+  "tts",
+  "ja",
+  "dialogue"
+ ],
+ "downloads": 48210,
+ "likes": 912,
+ "lastModified": "2026-10-15T13:50:00Z",
+ "gated": false,
+ "license": "cc-by-nc-sa-4.0",
+ "description": "多話者の会話音声を1パスで生成する TTS モデル。"
+}

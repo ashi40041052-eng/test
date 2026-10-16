@@ -434,10 +434,27 @@
     }
   }
 
+  // Best-effort v3 context capture: /2/thread JSON as related/thread.json, create-only. Never rejects; never blocks the save.
+  async function captureThread(cfg, item) {
+    try {
+      const x = parseXStatus(item && item.url);
+      if (!x || !isConfigured(cfg) || (g.navigator && g.navigator.onLine === false)) return 'skipped';
+      const path = archiveDir(item.id) + 'related/thread.json';
+      if (await remoteExists(cfg, path)) return 'skipped'; // processor (or an earlier run) did it
+      const r = await fetch('https://api.fxtwitter.com/2/thread/' + x.statusId, { headers: { Accept: 'application/json' } });
+      if (!r.ok) return 'failed';
+      const thread = await r.json();
+      if (!thread || !Array.isArray(thread.thread)) return 'failed';
+      return (await pushFile(cfg, path, thread, 'archive thread ' + item.id)) === 'ok' ? 'done' : 'failed';
+    } catch (e) {
+      return 'failed';
+    }
+  }
+
   // Captures started by syncAll; the service worker waits on these so the browser keeps it alive.
   const captures = new Set();
   function startCapture(cfg, item) {
-    const p = new Promise((res) => queueMicrotask(() => captureSnapshot(cfg, item).then(res, () => res('failed'))));
+    const p = new Promise((res) => queueMicrotask(() => captureSnapshot(cfg, item).then(() => captureThread(cfg, item)).then(res, () => res('failed'))));
     captures.add(p);
     p.then(() => captures.delete(p));
   }
@@ -512,7 +529,7 @@
     setDeleted, latestEvents, getAllEvents,
     getConfig, setConfig, isConfigured, syncAll, fetchIndex, cachedIndex, testConnection,
     remotePath, isoLocal,
-    captureSnapshot, capturesIdle, snapshotFromFx, parseXStatus, archiveDir,
+    captureSnapshot, captureThread, capturesIdle, snapshotFromFx, parseXStatus, archiveDir,
     // dashboard helpers
     kvGet, kvSet, apiUrl, headers,
   };

@@ -98,13 +98,13 @@
   // ---------- state <-> URL ----------
   function readHash() {
     const h = DL.parseHash(location.hash);
-    state.filters = { cat: h.cat, tag: h.tag, q: h.q, per: h.per, st: h.st, trash: h.trash === '1' ? '1' : '' };
+    state.filters = { cat: h.cat, tag: h.tag, q: h.q, per: h.per, st: h.st, trash: h.trash === '1' ? '1' : '', sub: h.sub };
     state.sel = h.id || null;
     $('#q').value = h.q || '';
   }
   function writeHash() {
     const f = state.filters;
-    const h = DL.buildHash({ id: state.sel, cat: f.cat, tag: f.tag, q: f.q, per: f.per, st: f.st, trash: f.trash });
+    const h = DL.buildHash({ id: state.sel, cat: f.cat, tag: f.tag, q: f.q, per: f.per, st: f.st, trash: f.trash, sub: f.sub });
     history.replaceState(null, '', location.pathname + location.search + h);
   }
 
@@ -119,11 +119,12 @@
 
   function renderSide() {
     const f = state.filters;
-    const fc = DL.facets(visibleBase());
+    const fc = DL.facets(visibleBase(), metaOf);
     const opt = (key, val, label, n) => '<button type="button" class="fopt' + ((f[key] || '') === val ? ' on' : '') + '" data-k="' + key + '" data-v="' + esc(val) + '"><span>' + esc(label) + '</span>' + (n == null ? '' : '<span class="n">' + n + '</span>') + '</button>';
     const total = visibleBase().length;
     $('#side').innerHTML =
       '<h3>カテゴリ</h3>' + opt('cat', '', 'すべて', total) + fc.cats.map((c) => opt('cat', c.name, c.name, c.count)).join('') +
+      (fc.subs.length ? '<h3>主題の種類</h3>' + opt('sub', '', 'すべて', null) + fc.subs.map((x) => opt('sub', x.key, (DL.pkInfo(x.key) || ['', x.key]).join(' '), x.count)).join('') : '') +
       '<h3>期間</h3>' + [['', 'すべて'], ['7', '7日'], ['30', '30日'], ['365', '1年']].map(([v, l]) => opt('per', v, l)).join('') +
       '<h3>状態</h3>' + [['', 'すべて'], ['pending', '未分析'], ['analyzed', '分析済み'], ['archived', 'アーカイブ済み'], ['unarchived', '未アーカイブ']].map(([v, l]) => opt('st', v, l)).join('') +
       '<h3>タグ</h3><div class="tagcloud">' + fc.tags.slice(0, 40).map((t) => opt('tag', t.name, t.name, t.count)).join('') + '</div>' +
@@ -135,9 +136,11 @@
     const status = it.status === 'analyzed' ? '<span class="st-ok">分析済み</span>' : '<span class="st-wait">未分析</span>';
     const arch = meta ? (meta.ar ? '<span class="st-ok">📦</span>' : '') : '';
     const au = it.author && (it.author.name || it.author.handle || it.author);
+    const pi = meta && meta.pu && DL.pkInfo(meta.pk);
+    const subj = pi ? '<div class="subj">' + pi[0] + ' ' + esc(DL.subjectLabel(meta.pu)) + '</div>' : '';
     return '<div class="card' + (it.id === state.sel ? ' sel' : '') + '" data-id="' + esc(it.id) + '">' +
       '<div class="t">' + esc(titleOf(it)) + '</div>' +
-      '<div class="s">' + esc(it.summary || it.note || it.url || '') + '</div>' +
+      '<div class="s">' + esc(it.summary || it.note || it.url || '') + '</div>' + subj +
       ((meta && meta.ar) ? '<img class="thumb" alt="" data-thumb="' + esc(it.id) + '">' : '<span></span>') +
       '<div class="m">' + status + arch + (au ? '<span>' + esc(au) + '</span>' : '') + '<span>' + esc(fmtDate(it.created_at)) + '</span>' +
       (it.category ? '<span class="tag">' + esc(it.category) + '</span>' : '') + '</div></div>';
@@ -195,8 +198,9 @@
       (it.note ? '<h4>メモ</h4><div>' + esc(it.note) + '</div>' : '');
     const actions = '<div class="actions"><button type="button" data-act="trash">' + (del ? '戻す (d)' : 'ゴミ箱へ (d)') + '</button>' +
       (it.url ? '<button type="button" data-act="open">元URLを開く (o)</button>' : '') + '</div>';
-    box.innerHTML = head + analysis + '<h4>アーカイブ</h4><div id="archBox" class="muted">読み込み中…</div>' + actions;
+    box.innerHTML = '<div id="subjBox"></div>' + head + analysis + '<div id="thrBox"></div><h4>アーカイブ</h4><div id="archBox" class="muted">読み込み中…</div>' + actions;
     box.scrollTop = 0;
+    renderRelated(id);
     let snap = null, errMsg = '';
     try { snap = await loadSnapshot(id); } catch (e) { errMsg = e.message; }
     if (state.sel !== id) return; // user moved on
@@ -223,6 +227,63 @@
       const u = await mediaUrl(LV.archiveDir(id) + img.dataset.local).catch(() => null);
       if (u && state.sel === id) img.src = u;
     });
+  }
+
+  // ---------- v3: subject card + thread (related.json) ----------
+  const relCache = new Map();
+  function loadRelated(id) {
+    if (!relCache.has(id)) relCache.set(id, read(LV.archiveDir(id) + 'related.json', 'json').catch(() => null));
+    return relCache.get(id);
+  }
+  const fmtN = (n) => (n == null ? '' : Number(n).toLocaleString('ja-JP'));
+  function resFacts(r, m) { // one-line facts from the resource meta json
+    if (!m) return '';
+    const a = [];
+    if (r.type === 'github') { if (m.stars != null) a.push('★' + fmtN(m.stars)); if (m.language) a.push(m.language); if (m.license) a.push(m.license); }
+    else if (r.type === 'hf') { if (m.downloads != null) a.push('⬇' + fmtN(m.downloads)); if (m.likes != null) a.push('♥' + fmtN(m.likes)); if (m.pipeline_tag) a.push(m.pipeline_tag); if (m.license) a.push(m.license); }
+    else if (r.type === 'arxiv') { if (m.authors) a.push([].concat(m.authors).slice(0, 3).join(', ')); if (m.published) a.push(String(m.published).slice(0, 10)); }
+    else if (r.type === 'youtube') { if (m.author_name) a.push(m.author_name); }
+    return a.join(' · ');
+  }
+  function resName(r, m) { return (m && (m.full_name || m.id || m.title)) || r.key || shortUrl(r.url); }
+  function miniRes(r) {
+    const pi = DL.pkInfo(r.pk);
+    return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer">' + (pi ? pi[0] + ' ' : '') + esc(r.key || shortUrl(r.url)) + '</a>';
+  }
+  function postHtml(p, nested) {
+    const roleLabel = { parent: '親', self: '保存ポスト', self_reply: '本人の続き', quote: '引用' }[p.role] || p.role;
+    return '<div class="tpost ' + esc(p.role) + (nested ? ' nested' : '') + '">' +
+      '<div class="th"><span class="role">' + esc(roleLabel) + '</span> <b>' + esc(p.author || '') + '</b>' + (p.published_at ? ' <span class="muted">' + esc(fmtDate(p.published_at, true)) + '</span>' : '') + '</div>' +
+      '<div class="tt">' + esc(p.text || '') + '</div>' +
+      (p.quote ? postHtml(Object.assign({}, p.quote, { quote: null, resources: [] }), true) : '') +
+      (p.resources && p.resources.length ? '<div class="tr">' + p.resources.map(miniRes).join(' ') + '</div>' : '') + '</div>';
+  }
+  async function renderRelated(id) {
+    const rel = await loadRelated(id);
+    if (state.sel !== id) return;
+    const it = state.index && state.index.items.find((x) => x.id === id);
+    const v = DL.relatedView(rel, it && it.primary_subject);
+    const sb = $('#subjBox'), tb = $('#thrBox');
+    if (!v || !sb || !tb) return;
+    const dir = LV.archiveDir(id);
+    if (v.primary && v.primary.kind === 'resource') {
+      const r = v.primary.resource;
+      const m = r.meta ? await read(dir + r.meta, 'json').catch(() => null) : null;
+      if (state.sel !== id || !$('#subjBox')) return;
+      const pi = DL.pkInfo(r.pk);
+      sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">' + (pi ? pi[0] + ' ' : '') + esc(r.type) + '</span> <span class="sc-name">' + esc(resName(r, m)) + '</span></div>' +
+        ((m && m.description) ? '<div class="sc-desc">' + esc(m.description) + '</div>' : '') +
+        (resFacts(r, m) ? '<div class="sc-facts">' + esc(resFacts(r, m)) + '</div>' : '') +
+        '<div class="sc-act"><a href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer">元ページを開く ↗</a></div>' +
+        (r.text ? '<details class="readme" data-path="' + esc(dir + r.text) + '"><summary>README / 本文を全文表示</summary><div class="body muted">読み込み中…</div></details>' : '') + '</div>';
+    } else if (v.primary && v.primary.kind === 'post') {
+      sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">💬 post</span> <span class="sc-name">' + esc(v.primary.post.author || '') + '</span></div><div class="sc-desc">' + esc((v.primary.post.text || '').slice(0, 200)) + '</div></div>';
+    }
+    if (v.thread.length > 1 || v.thread.some((p) => p.quote)) {
+      tb.innerHTML = '<h4>スレッド（親 → 保存ポスト → 本人の続き）</h4><div class="thread">' + v.thread.map((p) => postHtml(p)).join('') + '</div>';
+    }
+    const others = v.resources.filter((r) => !(v.primary && v.primary.resource && v.primary.resource.n === r.n));
+    if (others.length) tb.innerHTML += '<h4>その他のリソース</h4><div class="tr">' + others.map(miniRes).join(' ') + '</div>';
   }
 
   function renderAll() {
@@ -272,6 +333,15 @@
     $('#detail').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-act]');
       if (b) { if (b.dataset.act === 'trash') toggleTrash(state.sel); else openUrl(); return; }
+      const sum = e.target.closest('details.readme > summary');
+      if (sum) {
+        const d = sum.parentElement;
+        if (!d.dataset.loaded) {
+          d.dataset.loaded = '1';
+          read(d.dataset.path, 'text').then((t) => { d.querySelector('.body').textContent = t || '(本文なし)'; d.querySelector('.body').classList.remove('muted'); }).catch((err) => { d.querySelector('.body').textContent = err.message; });
+        }
+        return;
+      }
       const img = e.target.closest('.gallery img');
       if (img) img.parentElement.classList.toggle('big');
     });
