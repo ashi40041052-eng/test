@@ -97,3 +97,5 @@ kbd { background: var(--chip); border: 1px solid var(--line); border-radius: 4px
 .tpost.nested { margin-top: 8px; border-left: 3px solid var(--accent); background: var(--surface); }
 .tr { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 .rchip { background: var(--chip); border-radius: 10px; padding: 0 8px; font-size: 12px; text-decoration: none; color: var(--accent); }
+#xrStatus { background: transparent; color: var(--muted); font-weight: 400; }
+#xrStatus.warn { background: var(--warn); color: var(--surface); font-weight: 700; }

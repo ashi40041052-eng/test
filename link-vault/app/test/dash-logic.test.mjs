@@ -113,3 +113,24 @@ test('relatedView: a resource shown as a thread chip is not repeated in replies 
   assert.deepEqual(v.replies[0].resources.map((r) => r.n), [2]);
   assert.deepEqual(v.rest.map((r) => r.n), [3]);
 });
+
+test('keepSelection: a selection outside the view is cleared', () => {
+  const view = [{ id: 'a' }, { id: 'b' }];
+  assert.equal(DL.keepSelection(view, 'b'), 'b');
+  assert.equal(DL.keepSelection(view, 'zzz'), null);
+  assert.equal(DL.keepSelection([], 'a'), null);
+  assert.equal(DL.keepSelection(view, null), null);
+});
+test('threadShowsPost: the archive body is dropped only when the thread already shows the saved post', () => {
+  const self = { role: 'self', text: 'body' };
+  assert.equal(DL.threadShowsPost({ thread: [{ role: 'parent', text: 'p' }, self] }), true);
+  assert.equal(DL.threadShowsPost({ thread: [Object.assign({ quote: { text: 'q' } }, self)] }), true);
+  assert.equal(DL.threadShowsPost({ thread: [self] }), false, 'single post: thread not rendered');
+  assert.equal(DL.threadShowsPost({ thread: [{ role: 'parent', text: 'p' }, { role: 'self', text: '' }] }), false);
+  assert.equal(DL.threadShowsPost(null), false);
+});
+test('xrStatusText', () => {
+  assert.equal(DL.xrStatusText(null), '');
+  assert.match(DL.xrStatusText({ state: 'ok', at: '2026-10-17T03:00:00Z' }), /^リプ取得: 正常 10\/17 /);
+  assert.match(DL.xrStatusText({ state: 'skip', reason: 'login required', last_ok_at: '2026-10-16T03:00:00Z' }), /^リプ取得: スキップ \(login required\) · 最終成功 10\/16 /);
+});

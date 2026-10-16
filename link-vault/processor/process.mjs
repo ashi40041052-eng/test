@@ -14,11 +14,11 @@
  * --archive-only (launchd, every 20 min) only archiving runs: no AI, no analysis files.
  *
  * Related capture (parents, quotes, self replies, github/HF/arXiv/web resources) runs right after archiving.
- * --reanalyze-related re-analyzes the links that have related.json but no analysis.primary_subject yet, the
+ * The related re-check is ON by default (scheduled runs need no flag; --no-reanalyze-related turns it off). It re-analyzes the links that have related.json but no analysis.primary_subject yet, the
  * links whose related.json gained supplement resources (profile website / replies) after their analysis, and the
  * links with captured replies (related/x-replies.json) that the analysis has not seen yet.
  *
- * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--reanalyze-related] [--data <dir>] [--max <n>]
+ * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--no-reanalyze-related] [--data <dir>] [--max <n>]
  */
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
@@ -26,9 +26,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { normalizeUrl, walkJson, tagKey, readJson, writeIfChanged } from './lib/util.mjs';
+import { normalizeUrl, walkJson, tagKey, readJson, writeIfChanged, untrackedOverwritePaths } from './lib/util.mjs';
 import { archiveLink, backfillMedia, loadArchives, loadContent, readSnapshot, dirSize, DEFAULT_LIMITS } from './lib/archive.mjs';
 import { buildOutputs } from './lib/build.mjs';
+import { statusFile } from './lib/x-replies.mjs';
 import { captureRelated, newRelatedBudget, loadRelated } from './lib/related.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -55,7 +56,7 @@ const CONFIG = {
   claudeBin: process.env.LV_CLAUDE_BIN || 'claude',
   maxPerRun: Number(opt('--max') || process.env.LV_MAX_PER_RUN || 60),
   archiveOnly: flag('--archive-only'),
-  reanalyzeRelated: flag('--reanalyze-related'),
+  reanalyzeRelated: !flag('--no-reanalyze-related'), // default on (scheduled runs); --reanalyze-related is kept as a no-op alias
   useAi: !flag('--no-ai') && !flag('--archive-only'),
   useGit: !flag('--no-git') && process.env.LV_NO_GIT !== '1',
 };
@@ -121,8 +122,30 @@ function resolveArchiveConflicts() {
   return false;
 }
 
+// "untracked working tree files would be overwritten": the remote already has files we created locally (archive/ is
+// derived data, so the remote copy wins). Delete the listed paths under archive/ only; anything else is left alone.
+function removeBlockingArchiveFiles(err) {
+  const gone = [];
+  for (const rel of untrackedOverwritePaths(String(err.stderr || '') + String(err.message || ''))) {
+    if (!rel.startsWith('archive/') || rel.split('/').includes('..')) continue;
+    try { fssync.rmSync(path.join(CONFIG.dataDir, rel), { force: true }); gone.push(rel); } catch {}
+  }
+  return gone;
+}
+
 function gitPull() {
   if (rebaseInProgress()) { log('WARN: aborting a rebase left over from an earlier run'); git('rebase', '--abort'); }
+  for (let i = 0; ; i++) {
+    try { gitPullOnce(); return; } catch (e) {
+      const gone = i < 3 ? removeBlockingArchiveFiles(e) : [];
+      if (!gone.length) throw e;
+      log(`git pull: removed ${gone.length} local archive/ file(s) the remote also has (remote wins), retrying`);
+      if (rebaseInProgress()) { try { git('rebase', '--abort'); } catch {} }
+    }
+  }
+}
+
+function gitPullOnce() {
   try {
     git('pull', '--rebase', '--autostash');
   } catch (e) {
@@ -161,15 +184,27 @@ function gitCommitAndPush(message) {
 // ---------- lock ----------
 
 const lockFile = process.env.LV_LOCK_FILE || path.join(os.tmpdir(), 'link-vault-processor.lock');
+const LOCK_STALE_MS = 60 * 60 * 1000; // only for a lock without a readable pid
+const pidAlive = (pid) => {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } // ESRCH = gone
+};
+let lockTimer = null;
 function acquireLock() {
   try {
     const st = fssync.statSync(lockFile);
-    if (Date.now() - st.mtimeMs < 60 * 60 * 1000) return false;
+    const pid = Number.parseInt(fssync.readFileSync(lockFile, 'utf8'), 10);
+    // a live holder always blocks, however old the file looks; a dead one is stale at once
+    if (Number.isInteger(pid) && pid > 0 && pid !== process.pid) { if (pidAlive(pid)) return false; }
+    else if (Date.now() - st.mtimeMs < LOCK_STALE_MS) return false; // no pid to check: fall back to age
     fssync.unlinkSync(lockFile); // stale
   } catch {}
-  try { fssync.writeFileSync(lockFile, String(process.pid), { flag: 'wx' }); return true; } catch { return false; }
+  try { fssync.writeFileSync(lockFile, String(process.pid), { flag: 'wx' }); } catch { return false; }
+  // keep the mtime fresh so age-based readers (older versions, humans) can see the run is alive
+  lockTimer = setInterval(() => { try { const t = new Date(); fssync.utimesSync(lockFile, t, t); } catch {} }, Number(process.env.LV_LOCK_HEARTBEAT_MS) || 60_000);
+  lockTimer.unref();
+  return true;
 }
-const releaseLock = () => { try { fssync.unlinkSync(lockFile); } catch {} };
+const releaseLock = () => { if (!lockTimer) return; clearInterval(lockTimer); try { fssync.unlinkSync(lockFile); } catch {} };
 
 // ---------- data ----------
 
@@ -443,7 +478,7 @@ async function main() {
 
     if (!CONFIG.archiveOnly) await writeIfChanged(catFile, JSON.stringify(categories, null, 2) + '\n');
 
-    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records), related: await loadRelatedAll(dir, records) });
+    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records), related: await loadRelatedAll(dir, records), xrepliesStatus: await readJson(statusFile(), null) });
     // knowledge/categories is fully generated: remove files for categories that no longer exist.
     const catDir = path.join(dir, 'knowledge', 'categories');
     if (fssync.existsSync(catDir)) {

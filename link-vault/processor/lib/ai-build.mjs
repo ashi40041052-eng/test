@@ -4,7 +4,7 @@ import { safeFileName, tagKey } from './util.mjs';
 import { classifyUrl } from './related.mjs';
 
 const MANIFEST_MAX_BYTES = 300;
-const MANIFEST_RELATED_MAX_BYTES = 400; // lines that carry pk/pu
+const MANIFEST_RELATED_MAX_BYTES = 640; // lines that carry pk/pu
 const RECENT_COUNT = 30;
 const LLMS_MAX_LINES = 60;
 
@@ -281,7 +281,7 @@ const SCHEMA_MD = `# Link Vault ai/ スキーマ
 
 ## manifest.jsonl
 
-1 行 1 リンク(新しい順)。キー: id, t=title, c=category, g=tags, a=author, d=保存日, p=公開日, s=source_type, st=status, ar=archived(0/1), f=\`ai/\` 基準の相対パス。関連情報があるリンクは pk=主題の種類(r=リポジトリ m=モデル/データセット p=論文 s=サイト v=動画 x=ポスト -=なし)と pu=主題のURL(短縮しない)・pn=主題の名前(リポジトリ名・モデル名など。主題が自己/不明なら無し)も持つ(1行400バイトまで)。主題だけを種類別に見たいときは subjects.md。
+1 行 1 リンク(新しい順)。キー: id, t=title, c=category, g=tags, a=author, d=保存日, p=公開日, s=source_type, st=status, ar=archived(0/1), f=\`ai/\` 基準の相対パス。関連情報があるリンクは pk=主題の種類(r=リポジトリ m=モデル/データセット p=論文 s=サイト v=動画 x=ポスト -=なし)と pu=主題のURL(短縮しない)・pn=主題の名前(リポジトリ名・モデル名など。主題が自己/不明なら無し)も持つ(1行640バイトまで)。主題だけを種類別に見たいときは subjects.md。
 
 ## その他
 
@@ -332,8 +332,11 @@ export function subjectsMarkdown(items, subjOf) {
 
 // ---------- everything ----------
 
+// logs/x-replies-status.json -> one line for llms.txt (state ok|skip|error, reason, time, last ok time)
+const xrepliesLine = (st) => `${st.state === 'ok' ? '正常' : st.state === 'error' ? 'エラー' : 'スキップ'}${st.reason ? `(${oneLine(st.reason, 100)})` : ''} ${st.at || '-'} / 最終成功 ${st.last_ok_at || '-'}`;
+
 // items: visible (not deleted) index items, newest first.
-export function buildAi({ items, byId, analyses, archives, cats, lastChange, pendingCount, related = new Map() }) {
+export function buildAi({ items, byId, analyses, archives, cats, lastChange, pendingCount, related = new Map(), xrepliesStatus = null }) {
   const files = {};
   const snapOf = (i) => archives.get(i.id) || null;
   const subjOf = (i) => subjectOf(related.get(i.id) || null, analyses.get(i.id));
@@ -377,6 +380,7 @@ export function buildAi({ items, byId, analyses, archives, cats, lastChange, pen
     '   画像は links/*.md 内の相対パス。項目定義は schema.md。',
     '   主題リソース(リポジトリ/モデル)で探す → manifest.jsonl の pu/pn を grep、または subjects.md(種類別の一覧)。',
     `## 統計  総数 ${items.length} / 未分析 ${pendingCount} / アーカイブ済み ${archivedCount} / 最終更新 ${lastChange || '-'}`,
+    ...(xrepliesStatus ? [`## リプ取得  ${xrepliesLine(xrepliesStatus)}`] : []),
     '## カテゴリ',
   ];
   const room = LLMS_MAX_LINES - head.length - 1;

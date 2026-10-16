@@ -63,3 +63,9 @@ export function canonicalTagMap(tagLists) {
   return m;
 }
 export const canonTags = (tags, map) => [...new Set((tags || []).map((t) => map.get(tagKey(t)) ?? t))];
+
+// git's "untracked working tree files would be overwritten by merge/checkout" error -> the listed paths
+export function untrackedOverwritePaths(text) {
+  const m = String(text).match(/untracked working tree files would be overwritten[^\n]*\n((?:[ \t]+[^\n]+\n?)+)/i);
+  return m ? m[1].split('\n').map((l) => l.trim()).filter(Boolean) : [];
+}
