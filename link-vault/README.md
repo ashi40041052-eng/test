@@ -167,6 +167,7 @@ Mac / Linux は cron に `0 8,11,14,18,22 * * * cd /path/to/processor && node pr
 - テスト用: `cd link-vault/app && python3 -m http.server 8765` → `http://localhost:8765/dashboard.html?mock=1`（`app/fixtures/mock/` のダミーデータ。トークン不要）。
 - 保存時アーカイブ: X のリンクを送信できた直後に、スマホが fxtwitter から本文と画像（最大4枚）を `archive/<年>/<id>/` に create-only で保存します。保存・送信の成否には影響せず、失敗しても processor が後で拾います。
 - 純ロジックのテスト: `node --test link-vault/app/test`
+- **スマホ経路の通し確認（実機不要）**: `cd link-vault && npm run verify:phone`（要ネット）。本物の `app/core.js` で「保存→送信→送信時の取得」を実行し、GitHub だけをメモリ上の偽 API に差し替え（トークン・本物のリポジトリ・`link-vault-data` は使わない）、fxtwitter と画像は本物を使います。`links/`・`archive/<年>/<id>/snapshot.json`（`captured_by: phone`）・`media/`・`related/thread.json` のパスと形を確認し、processor の `readSnapshot`/`loadArchives`/`contentFromSnapshot`/`graphFromThread` で読めることまで検証。別のリンクで試すなら `LV_E2E_URL=<Xの投稿URL>`。終了コード 0=合格 / 1=不合格 / 2=fxtwitter に届かない。実ブラウザ版は `core.js` が `api.github.com` 固定のため対象外。
 
 ## カテゴリについて
 
