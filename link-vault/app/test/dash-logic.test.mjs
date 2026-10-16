@@ -36,3 +36,43 @@ test('facets, step, firstLocalMedia', () => {
   assert.equal(DL.firstLocalMedia({ media: [{ type: 'video', local: 'media/01.mp4' }, { type: 'photo', local: 'media/02.jpg' }] }), 'media/02.jpg');
   assert.equal(DL.firstLocalMedia(null), null);
 });
+
+test('relatedView: thread order, nested quote, primary, pk', () => {
+  const rel = {
+    posts: [
+      { sid: 's', role: 'self', depth: 0, quote_sid: 'q', author: '@a', text: 'x' },
+      { sid: 'p2', role: 'parent', depth: 2, author: '@g', text: 'g' },
+      { sid: 'p1', role: 'parent', depth: 1, author: '@p', text: 'p' },
+      { sid: 'r2', role: 'self_reply', depth: 2, author: '@a', text: 'r2' },
+      { sid: 'r1', role: 'self_reply', depth: 1, author: '@a', text: 'r1' },
+      { sid: 'q', role: 'quote', of: 's', author: '@q', text: 'quoted' },
+    ],
+    resources: [{ n: 1, url: 'https://github.com/o/r', type: 'github', found_in: ['r1'] }, { n: 2, url: 'https://x.org/', type: 'web', found_in: ['q'] }],
+    primary: { kind: 'resource', n: 1 },
+  };
+  const v = DL.relatedView(rel);
+  assert.deepEqual(v.thread.map((p) => p.sid), ['p2', 'p1', 's', 'r1', 'r2']);
+  assert.equal(v.thread[2].quote.sid, 'q');
+  assert.equal(v.thread[2].resources[0].n, 2); // resource found in the quote attaches to the quoting post
+  assert.equal(v.thread[3].resources[0].n, 1);
+  assert.equal(v.primary.resource.n, 1);
+  assert.equal(v.pk, 'r');
+  // AI primary wins
+  assert.equal(DL.relatedView(rel, { url: 'https://x.org/' }).pk, 's');
+  // self primary / empty
+  assert.equal(DL.relatedView({ ...rel, primary: { kind: 'self' } }).pk, '-');
+  assert.equal(DL.relatedView(null), null);
+  assert.equal(DL.relatedView({ posts: [] }), null);
+});
+
+test('subject filter + facets + labels', () => {
+  const items = [{ id: 'a', category: 'c' }, { id: 'b', category: 'c' }, { id: 'c' }];
+  const meta = { a: { pk: 'r' }, b: { pk: 'm' } };
+  const mo = (id) => meta[id];
+  assert.deepEqual(DL.filterItems(items, { sub: 'r' }, () => false, mo, 0).map((x) => x.id), ['a']);
+  assert.deepEqual(DL.filterItems(items, { sub: '' }, () => false, mo, 0).length, 3);
+  assert.deepEqual(DL.facets(items, mo).subs.map((s) => s.key).sort(), ['m', 'r']);
+  assert.equal(DL.subjectLabel('https://github.com/BuilderIO/agent-native/tree/main'), 'BuilderIO/agent-native');
+  assert.equal(DL.subjectLabel('https://huggingface.co/datasets/o/d'), 'o/d');
+  assert.equal(DL.parseHash(DL.buildHash({ sub: 'r' })).sub, 'r');
+});

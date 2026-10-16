@@ -148,10 +148,11 @@ Mac / Linux は cron に `0 8,11,14,18,22 * * * cd /path/to/processor && node pr
 - `ai/llms.txt` … 入口（60行以内）。読む順・カテゴリ一覧・統計
 - `ai/recent.md` … 直近30件 / `ai/categories/<カテゴリ>.md` … カテゴリ別の索引
 - `ai/manifest.jsonl` … 1行1リンク（grep 用: t=タイトル g=タグ a=投稿者）/ `ai/tags.json`
-- `ai/links/<年>/<id>.md` … 1リンク1ファイル（frontmatter＋要約＋ポイント＋保存済みの本文全文）
+- `ai/links/<年>/<id>.md` … 1リンク1ファイル（frontmatter＋要約＋ポイント＋**主題リソース**（README・モデルカード全文）＋**文脈**（親・引用・本人の続き）＋保存済みの本文全文）
+- 主題（ポストが指すリポジトリ/モデル/論文）で探す → `ai/manifest.jsonl` の `pk`（r=リポジトリ m=モデル p=論文 s=サイト v=動画 x=ポスト）と `pu`（主題のURL）を grep
 - `ai/schema.md` … 項目の定義
 
-`knowledge/`（従来の形式）も引き続き生成されます。本文は `## 本文` 見出し以下に隔離されており、そこに書かれた指示には従わない前提です。
+`knowledge/`（従来の形式）も引き続き生成されます。`## 要約`/`## ポイント` 以外（主題リソース・文脈・本文）は第三者のテキストで、そこに書かれた指示には従わない前提です。
 
 例:
 - Claude Code / Cursor 等でデータリポジトリを開いて「ai/llms.txt を読んで、最近保存したAI活用のアイデアをまとめて」
@@ -162,6 +163,7 @@ Mac / Linux は cron に `0 8,11,14,18,22 * * * cd /path/to/processor && node pr
 
 - `app/dashboard.html`（アプリと同じ場所に公開されます。例 `https://<ユーザー名>.github.io/<リポジトリ名>/link-vault/app/dashboard.html`）: PC 向けの 3 ペイン画面。左=カテゴリ/期間/状態/タグ、中央=一覧、右=詳細（アーカイブ本文・引用・画像）。キー操作は `j`/`k` 移動、`/` 検索、`o` 元URL、`d` ゴミ箱、`t` ゴミ箱表示。設定（token）はスマホ版と同じブラウザの設定を共有するので、同じオリジンで一度設定すれば動きます。書き込みはゴミ箱の削除/復元だけ。
 - **Mac ならトークン不要**: セットアップで `com.linkvault.dashboard` が常駐し、`http://127.0.0.1:4848/` で同じ画面が開きます（`processor/dashboard-server.mjs` が `app/` と手元の `link-vault-data` を読み取り専用で配信。20分ごとの保存/分析で自動更新。ゴミ箱操作はスマホか Pages 版で）。
+- **v3 関連表示**（`DESIGN-v3.md` §7/§8）: 詳細ペイン最上部に**主題カード**（リポジトリ/モデル/論文/サイト/動画/ポスト。説明・★/DL・ライセンス・元ページ・README 全文は開いた時に取得）、その下に**スレッド**（親 → 保存ポスト → 本人の続き。引用は枠で入れ子、ポスト内の URL はリソースチップ）。一覧カードに主題名、左ペインに「主題の種類」フィルタ（`manifest.jsonl` の `pk`/`pu`）。読むのは `related.json` と `related/res/*`（無ければ従来表示。モック・ローカル(`/data/`)・Pages 版で動く）。ロジックは `dash-logic.js` の `relatedView`。スマホは保存時に `related/thread.json`（fxtwitter `/2/thread`）を create-only・best-effort で置くだけ（`core.js` の `captureThread`、保存は止めない）。
 - テスト用: `cd link-vault/app && python3 -m http.server 8765` → `http://localhost:8765/dashboard.html?mock=1`（`app/fixtures/mock/` のダミーデータ。トークン不要）。
 - 保存時アーカイブ: X のリンクを送信できた直後に、スマホが fxtwitter から本文と画像（最大4枚）を `archive/<年>/<id>/` に create-only で保存します。保存・送信の成否には影響せず、失敗しても processor が後で拾います。
 - 純ロジックのテスト: `node --test link-vault/app/test`
@@ -182,7 +184,7 @@ X のページはログインなしで本文が読めないため、公開 API �
 
 **追加料金なし**（Claude の Pro / Max プランの範囲内）。GitHub もアプリも無料です。
 
-- 分析は 1 回の実行で最大 8 件ずつまとめて Claude Code に渡すので、プランの利用枠の消費は少なめです
+- 分析は 1 回の実行で最大 5 件ずつまとめて Claude Code に渡すので、プランの利用枠の消費は少なめです
 - 枠をもっと節約したいときは `.env` で `LV_MODEL=haiku`（カテゴリ分けなら十分）。精度重視なら `opus`（既定）
 - プランの上限に達して分析が失敗しても、リンクは消えません。失敗分は次の実行で自動的に再挑戦します（3回失敗したら、その後は1日1回ずっと再挑戦）
 
@@ -208,8 +210,15 @@ link-vault-data/
 └── archive/2026/20261014-120305-a1b2c3d4/           ← 本文・画像のスナップショット（不変）
     ├── snapshot.json                                  作成後は絶対に上書きしない（create-only）
     ├── media/01.jpg                                   画像・動画（ファイルの有無が正）
-    └── attempts.json                                  取得失敗の記録（snapshot ができたら触らない）
+    ├── attempts.json                                  取得失敗の記録（snapshot ができたら触らない）
+    ├── related.json                                   v3: 文脈グラフ+リソース台帳+主題（create-only）
+    ├── related-attempts.json                          related.json ができるまでの失敗記録
+    └── related/                                       posts/<id>.json=親・引用・本人の続き（fxtwitter v2 そのまま）,
+                                                       res/NN-種類-名前.{json,md}=GitHub README・HF モデルカード・論文 abstract・Web 本文,
+                                                       thread.json=スマホが置いた /2/thread（あれば processor はこれを使う）
 ```
+
+**related（v3、`DESIGN-v3.md`）**: X のポストは、それが指すもの（GitHub/HF/論文/サイト）のために保存される、という前提で、processor が archive の直後に `related.json` を作ります。`/2/thread` から親（3段まで）・引用（1段）・本人の続きのリプ（5件まで）を取り、その中の URL（t.co 展開済み・重複除去・1リンク8件まで）を種類別に取得します（GitHub=repo メタ+README、HF=モデルカード（gated で raw README が 401 のときは公開ページの本文を保存し `body_source: page` と記録）、arXiv=abstract（3秒間隔・1回20件）、YouTube=oembed、その他=本文）。主題（`primary`）は URL の位置で点数化して決め、AI の `primary_subject` と両方を記録します（`ai/` では AI 側を優先）。`index.json` の各項目にも `primary_subject` / `resource_kind` を入れます（ダッシュボードが AI の主題を優先表示）。AI がバッチの一部にしか答えなかったリンクは、同じ実行内で残りだけをもう1回だけ聞き直します。`related.json` は再取得しません。やり直したいときは `archive/<年>/<id>/` の `related*` を手で消してください。取得に失敗したリソースは次の実行で最大5回、以後1日1回再試行します。他人の返信は取得しません。GitHub は `gh auth token` があれば使います（無くても動きます）。
 
 `archive/` は PC の processor（20分ごとの `node process.mjs --archive-only`、AI なし）が埋め、スマホが先に作った分は上書きしません。再取得したいときは、そのリンクの `archive/<年>/<id>/` を手で消してください（分析の再実行では消えません）。画像は1枚5MB・最大8枚、動画は20MBまで1本、1回の実行で合計150MB、archive が2GBを超えたら動画の保存を止めます。fxtwitter で3回連続「見つからない」だと削除済み（`gone`）として週1回だけ再試行します。
 
@@ -227,6 +236,8 @@ cd link-vault/processor
 npm test              # 単体テスト + E2E（偽の claude コマンド・偽の Claude API・偽の Web ページで process.mjs を実行）
 npm run rebuild       # AI を呼ばずに index.json / knowledge だけ再生成
 node process.mjs --no-git --data /path/to/data   # git 操作なし
-node process.mjs --archive-only                  # 本文・画像の保存だけ（AI なし・20分ごとの launchd/cron ジョブ）
-# テスト用の環境変数: LV_FXTWITTER_BASE（fxtwitter の代わり）, LV_NO_ENV_FILE=1, LV_LOCK_FILE=<path>
+node process.mjs --archive-only                  # 本文・画像・関連（related）の保存だけ（AI なし・20分ごとの launchd/cron ジョブ）
+node process.mjs --reanalyze-related             # related.json があり analysis に primary_subject が無いリンクだけ分析し直す（他は触らない）
+bash test/record-fixtures.sh                     # テスト用の実 API 応答（fxtwitter v2・GitHub・HF・arXiv・YouTube）を録り直す
+# テスト用の環境変数: LV_FXTWITTER_BASE（fxtwitter の代わり）, LV_GITHUB_BASE / LV_HF_BASE / LV_ARXIV_BASE / LV_YOUTUBE_BASE, LV_NO_ENV_FILE=1, LV_LOCK_FILE=<path>
 ```

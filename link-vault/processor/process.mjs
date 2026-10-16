@@ -13,7 +13,10 @@
  * archive/ (immutable snapshots of each link's text + media) is created before analysis; with
  * --archive-only (launchd, every 20 min) only archiving runs: no AI, no analysis files.
  *
- * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--data <dir>] [--max <n>]
+ * Related capture (parents, quotes, self replies, github/HF/arXiv/web resources) runs right after archiving.
+ * --reanalyze-related re-analyzes the links that have related.json but no analysis.primary_subject yet.
+ *
+ * Usage: node process.mjs [--no-ai] [--no-git] [--archive-only] [--reanalyze-related] [--data <dir>] [--max <n>]
  */
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
@@ -24,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { normalizeUrl, walkJson, readJson, writeIfChanged } from './lib/util.mjs';
 import { archiveLink, backfillMedia, loadArchives, loadContent, readSnapshot, dirSize, DEFAULT_LIMITS } from './lib/archive.mjs';
 import { buildOutputs } from './lib/build.mjs';
+import { captureRelated, newRelatedBudget, loadRelated } from './lib/related.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Failed links are retried on every run up to MAX_ATTEMPTS, then once a day (forever).
@@ -49,6 +53,7 @@ const CONFIG = {
   claudeBin: process.env.LV_CLAUDE_BIN || 'claude',
   maxPerRun: Number(opt('--max') || process.env.LV_MAX_PER_RUN || 60),
   archiveOnly: flag('--archive-only'),
+  reanalyzeRelated: flag('--reanalyze-related'),
   useAi: !flag('--no-ai') && !flag('--archive-only'),
   useGit: !flag('--no-git') && process.env.LV_NO_GIT !== '1',
 };
@@ -232,6 +237,15 @@ async function saveAnalysis(dir, a) {
   await writeIfChanged(analysisPath(dir, a.id), JSON.stringify(a, null, 2) + '\n');
 }
 
+async function loadRelatedAll(dir, records) {
+  const m = new Map();
+  for (const r of records) {
+    const rel = await loadRelated(dir, r.id);
+    if (rel) m.set(r.id, rel);
+  }
+  return m;
+}
+
 // ---------- main ----------
 
 async function main() {
@@ -321,10 +335,30 @@ async function main() {
       log(`archive: created=${archiveStats.created} failed=${archiveStats.failed} media=${Math.round((DEFAULT_LIMITS.runBudgetBytes - budget.remaining) / 1024)}KB total=${Math.round(dirSize(path.join(dir, 'archive')) / 1024 / 1024)}MB`);
     }
 
+    // ---- related: context graph + linked resources of each X link (DESIGN-v3.md) ----
+    {
+      const rBudget = newRelatedBudget();
+      const rStats = { created: 0, filled: 0, failed: 0 };
+      const byId = new Map(records.map((r) => [r.id, r]));
+      for (const id of firstByUrl.values()) {
+        if (deleted.has(id)) continue;
+        try {
+          const res = await captureRelated({ dir, record: byId.get(id), budget: rBudget, log: (m) => log(`related: ${m}`) });
+          if (res === 'created') rStats.created++;
+          else if (res === 'filled') rStats.filled++;
+          else if (res === 'failed') rStats.failed++;
+        } catch (e) { rStats.failed++; log(`WARN: related ${id}: ${e.message}`); }
+      }
+      log(`related: created=${rStats.created} filled=${rStats.filled} failed=${rStats.failed} resources_fetched=${40 - rBudget.resources}`);
+    }
+
+    const relatedIds = new Set();
+    if (CONFIG.reanalyzeRelated) for (const r of records) if (fssync.existsSync(path.join(dir, 'archive', r.id.slice(0, 4), r.id, 'related.json'))) relatedIds.add(r.id);
     const todo = CONFIG.archiveOnly ? [] : records.filter((r) => {
       const a = analyses.get(r.id);
       if (deleted.has(r.id)) return false; // don't spend AI on deleted links
       if (!a) return true;
+      if (CONFIG.reanalyzeRelated && a.status === 'analyzed' && !a.primary_subject && relatedIds.has(r.id)) return true;
       if (a.status !== 'failed') return false;
       return (a.attempts || 0) < MAX_ATTEMPTS || Date.now() - new Date(a.analyzed_at).getTime() > DAY_MS;
     });
@@ -365,6 +399,7 @@ async function main() {
                 final_url: content.final_url || null,
                 fetch_error: content.ok ? null : content.error,
               },
+              ...(content.related ? { related_used: { posts: content.related.posts.length, resources: content.related.resources.length }, primary_rule: content.related.primary } : {}),
               model,
             };
             analyses.set(r.id, a);
@@ -372,6 +407,7 @@ async function main() {
             analyzed++;
             log(`analyzed ${r.id} -> [${a.category}] ${a.title}`);
           } catch (e) {
+            if (prev?.status === 'analyzed') { failed++; log(`FAILED re-analysis ${r.id} (kept the previous analysis): ${String(e.message || e)}`); continue; }
             const a = { id: r.id, status: 'failed', attempts: (prev?.attempts || 0) + 1, error: String(e.message || e), analyzed_at: new Date().toISOString() };
             analyses.set(r.id, a);
             await saveAnalysis(dir, a);
@@ -384,7 +420,7 @@ async function main() {
 
     if (!CONFIG.archiveOnly) await writeIfChanged(catFile, JSON.stringify(categories, null, 2) + '\n');
 
-    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records) });
+    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records), related: await loadRelatedAll(dir, records) });
     // knowledge/categories is fully generated: remove files for categories that no longer exist.
     const catDir = path.join(dir, 'knowledge', 'categories');
     if (fssync.existsSync(catDir)) {

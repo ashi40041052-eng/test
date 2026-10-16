@@ -1,0 +1,14 @@
+{
+ "full_name": "example/claude-hooks-kit",
+ "description": "Ready-made Claude Code hooks: lint, test, notify.",
+ "stars": 340,
+ "language": "TypeScript",
+ "license": "MIT",
+ "topics": [
+  "claude-code",
+  "hooks"
+ ],
+ "pushed_at": "2026-10-12T00:00:00Z",
+ "default_branch": "main",
+ "homepage": null
+}

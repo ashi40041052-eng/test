@@ -95,3 +95,33 @@ test('capture: 422 on PUT is treated as success; never rejects on failures', asy
   globalThis.fetch = async () => { throw new Error('offline'); };
   assert.equal(await LV.captureSnapshot(cfg, item), 'failed');
 });
+
+test('captureThread: /2/thread JSON stored create-only as related/thread.json; best-effort', async () => {
+  const thread = { status: 200, thread: [{ id: '1' }], author: {} };
+  const puts = [];
+  const net = (over = {}) => {
+    globalThis.fetch = async (url, opt = {}) => {
+      url = String(url);
+      if (url === 'https://api.fxtwitter.com/2/thread/2110755123748340030') return over.fx ? new Response('{}', { status: over.fx }) : new Response(JSON.stringify(over.body || thread));
+      if (url.includes('api.github.com')) {
+        const path = decodeURIComponent(url.split('/contents/')[1].split('?')[0]);
+        if (opt.method === 'PUT') { puts.push({ path, body: JSON.parse(opt.body) }); return new Response('{}', { status: 201 }); }
+        return new Response('{}', { status: over.exists ? 200 : 404 });
+      }
+      throw new Error('unexpected ' + url);
+    };
+  };
+  net();
+  assert.equal(await LV.captureThread(cfg, item), 'done');
+  assert.equal(puts[0].path, 'archive/2026/' + item.id + '/related/thread.json');
+  assert.equal('sha' in puts[0].body, false);
+  assert.deepEqual(JSON.parse(Buffer.from(puts[0].body.content, 'base64').toString()), thread);
+  puts.length = 0;
+  net({ exists: true }); assert.equal(await LV.captureThread(cfg, item), 'skipped');
+  net({ fx: 404 }); assert.equal(await LV.captureThread(cfg, item), 'failed');
+  net({ body: { status: 200 } }); assert.equal(await LV.captureThread(cfg, item), 'failed');
+  assert.equal(await LV.captureThread(cfg, { id: item.id, url: 'https://example.com/' }), 'skipped');
+  globalThis.fetch = async () => { throw new Error('offline'); };
+  assert.equal(await LV.captureThread(cfg, item), 'failed');
+  assert.equal(puts.length, 0);
+});

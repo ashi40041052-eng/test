@@ -22,6 +22,16 @@ async function fakeServer() {
   const hits = { fx: [], web: 0 };
   const server = http.createServer((req, res) => {
     const u = req.url;
+    const th = u.match(/^\/fx\/2\/thread\/(\d+)/); // related capture (v3): the post alone, without urls so nothing external is fetched
+    if (th) {
+      hits.fx.push('thread:' + th[1]);
+      if (th[1] === '999') { res.statusCode = 404; res.end('{"code":404}'); return; }
+      const t = JSON.parse(JSON.stringify((th[1] === '2110755123748340030' ? pent : yeb).tweet));
+      t.id = th[1]; t.text = String(t.text).replace(/https?:\/\/\S+/g, ''); delete t.card; delete t.quote; t.raw_text = { text: t.text, facets: [] };
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ code: 200, status: t, thread: [t] }));
+      return;
+    }
     const m = u.match(/^\/fx\/([^/]+)\/status\/(\d+)/);
     if (m) {
       hits.fx.push(m[2]);
@@ -100,8 +110,8 @@ test('--archive-only: snapshots + media for X and web, idempotent, no analysis, 
     await proc();
     const t2 = await tree(dir);
     const changed = Object.keys({ ...t1, ...t2 }).filter((k) => t1[k] !== t2[k]);
-    assert.deepEqual(changed, [`archive/2026/${ids.gone}/attempts.json`]);
-    assert.equal(hits.fx.length - hitsBefore, 1, 'only the missing post was requested again');
+    assert.deepEqual(changed, [`archive/2026/${ids.gone}/attempts.json`, `archive/2026/${ids.gone}/related-attempts.json`]);
+    assert.equal(hits.fx.length - hitsBefore, 2, 'only the missing post was requested again (snapshot + thread)');
     assert.equal(hits.web, 1);
 
     // third 404 -> gone; afterwards not retried every run

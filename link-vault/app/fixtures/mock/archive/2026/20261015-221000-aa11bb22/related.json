@@ -1,0 +1,93 @@
+{
+ "schema": 1,
+ "id": "20261015-221000-aa11bb22",
+ "captured_at": "2026-10-16T02:00:00Z",
+ "captured_by": "processor",
+ "root": "aa11bb2200",
+ "posts": [
+  {
+   "sid": "aa11bb2200",
+   "role": "self",
+   "depth": 0,
+   "author": "@dev_notes",
+   "text": "Claude Code のフック機能で毎回の確認を自動化する方法\n\nソースコードはリプへ",
+   "published_at": "2026-10-15T05:30:12Z",
+   "urls": [],
+   "file": "related/posts/aa11bb2200.json",
+   "quote_sid": "aa11bb2299"
+  },
+  {
+   "sid": "aa11bb2299",
+   "role": "quote",
+   "depth": 0,
+   "author": "@anthropic_dev",
+   "text": "Hooks let you run shell commands on tool events.",
+   "published_at": "2026-10-14T20:00:00Z",
+   "urls": [
+    "https://docs.example.com/hooks"
+   ],
+   "file": "related/posts/aa11bb2299.json",
+   "of": "aa11bb2200"
+  },
+  {
+   "sid": "aa11bb2201",
+   "role": "self_reply",
+   "depth": 1,
+   "author": "@dev_notes",
+   "text": "ソースコード https://github.com/example/claude-hooks-kit",
+   "published_at": "2026-10-15T05:31:40Z",
+   "urls": [
+    "https://github.com/example/claude-hooks-kit"
+   ],
+   "file": "related/posts/aa11bb2201.json"
+  },
+  {
+   "sid": "aa11bb2202",
+   "role": "self_reply",
+   "depth": 2,
+   "author": "@dev_notes",
+   "text": "公式ドキュメントはこちら https://docs.example.com/hooks",
+   "published_at": "2026-10-15T05:32:10Z",
+   "urls": [
+    "https://docs.example.com/hooks"
+   ],
+   "file": "related/posts/aa11bb2202.json"
+  }
+ ],
+ "resources": [
+  {
+   "n": 1,
+   "url": "https://github.com/example/claude-hooks-kit",
+   "type": "github",
+   "key": "example/claude-hooks-kit",
+   "found_in": [
+    "aa11bb2201"
+   ],
+   "meta": "related/res/01-github-example-claude-hooks-kit.json",
+   "text": "related/res/01-github-example-claude-hooks-kit.md",
+   "bytes": 600,
+   "ok": true,
+   "error": null
+  },
+  {
+   "n": 2,
+   "url": "https://docs.example.com/hooks",
+   "type": "web",
+   "key": "docs.example.com/hooks",
+   "found_in": [
+    "aa11bb2299",
+    "aa11bb2202"
+   ],
+   "meta": "related/res/02-web-docs-example-com-hooks.json",
+   "text": null,
+   "bytes": 0,
+   "ok": false,
+   "error": "timeout"
+  }
+ ],
+ "primary": {
+  "kind": "resource",
+  "n": 1,
+  "reason": "self reply with source code url"
+ }
+}

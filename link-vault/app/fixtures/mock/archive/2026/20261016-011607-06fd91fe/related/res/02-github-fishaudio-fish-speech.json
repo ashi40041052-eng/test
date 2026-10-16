@@ -1,0 +1,13 @@
+{
+ "full_name": "fishaudio/fish-speech",
+ "description": "Open-source TTS toolkit",
+ "stars": 21034,
+ "language": "Python",
+ "license": "Apache-2.0",
+ "topics": [
+  "tts"
+ ],
+ "pushed_at": "2026-10-14T09:00:00Z",
+ "default_branch": "main",
+ "homepage": null
+}
