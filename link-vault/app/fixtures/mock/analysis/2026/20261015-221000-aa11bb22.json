@@ -1,0 +1,23 @@
+{
+  "id": "20261015-221000-aa11bb22",
+  "status": "analyzed",
+  "v": 4,
+  "tldr": "Claude Code のフックで毎回の確認作業を自動化する手順",
+  "resources": [
+    {
+      "n": 1,
+      "url": "https://github.com/example/claude-hooks-kit",
+      "name": "example/claude-hooks-kit",
+      "type": "github",
+      "what": "Claude Code のフック設定をまとめたサンプル集。ツール実行の前後でシェルコマンドを走らせる。",
+      "features": [
+        "PreToolUse で危険なコマンドを止める",
+        "PostToolUse で整形・テストを自動実行",
+        "設定の雛形を貼るだけで使える"
+      ],
+      "usage": "git clone https://github.com/example/claude-hooks-kit && cd claude-hooks-kit && ./install.sh",
+      "audience": "Claude Code の確認作業を減らしたい人。",
+      "my_note": ""
+    }
+  ]
+}

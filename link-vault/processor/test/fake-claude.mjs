@@ -18,6 +18,12 @@ process.stdin.on('end', () => {
   const results = ids.filter((id) => !(process.env.FAKE_CLAUDE_DROP === id && ids.length > 1)).map((id) => ({
     primary_subject: (() => { const m = blocks[ids.indexOf(id)].match(/<subject type="(\w+)" url="([^"]*)"[^>]*>\n名前: ([^\n]*)/); return m && m[1] !== 'post' ? { kind: 'resource', url: m[2], name: m[3] } : { kind: 'self', url: null, name: '' }; })(),
     resource_kind: /<subject type="github"/.test(blocks[ids.indexOf(id)]) ? 'repository' : 'none',
+    // v4: one reading for every <subject ... n="N"> / <resource n="N" ...> that carries a body (FAKE_CLAUDE_NO_RESOURCES=1 answers none)
+    tldr: `一行${ids.indexOf(id)}`,
+    resources: process.env.FAKE_CLAUDE_NO_RESOURCES ? [] : [
+      ...[...blocks[ids.indexOf(id)].matchAll(/<subject type="(\w+)" url="([^"]*)" n="(\d+)"/g)].map((m) => ({ n: Number(m[3]), url: m[2], type: m[1], name: `res${m[3]}` })),
+      ...[...blocks[ids.indexOf(id)].matchAll(/<resource n="(\d+)" type="(\w+)" url="([^"]*)" name="([^"]*)"/g)].map((m) => ({ n: Number(m[1]), url: m[3], type: m[2], name: m[4] })),
+    ].map((r) => ({ ...r, what: `何${r.n}`, features: [`機能${r.n}a`, `機能${r.n}b`], usage: `npx run${r.n}`, audience: `向く人${r.n}`, my_note: 'AI が書いた自分メモ' })),
     id, title: `見出し${ids.indexOf(id)}`, summary: '要約', key_points: ['p'], category: 'AI活用',
     new_category_description: 'AIの使い方', tags: ['ai'], content_type: 'article', language: 'ja',
   }));

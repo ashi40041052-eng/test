@@ -30,7 +30,7 @@ kbd { background: var(--chip); border: 1px solid var(--line); border-radius: 4px
 #q:focus { outline: 2px solid var(--accent); }
 .pill { background: var(--warn); color: var(--surface); border-radius: 10px; padding: 0 8px; font-size: 11px; font-weight: 700; }
 
-.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(300px, 1fr) minmax(400px, 480px); }
+.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px minmax(300px, 1fr) minmax(480px, 680px); }
 .side, .list, .detail { overflow-y: auto; min-height: 0; }
 .side { padding: 10px 8px 20px; border-right: 1px solid var(--line); background: var(--surface); }
 .side h3 { margin: 14px 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
@@ -57,7 +57,7 @@ kbd { background: var(--chip); border: 1px solid var(--line); border-radius: 4px
 .detail { padding: 16px 20px 40px; background: var(--surface); border-left: 1px solid var(--line); }
 .detail h2 { margin: 0 0 4px; font-size: 18px; line-height: 1.35; }
 .detail .meta { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; }
-.detail h4 { margin: 18px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.detail h4 { margin: 22px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .detail ul { margin: 0; padding-left: 20px; }
 .body { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .quote { border-left: 3px solid var(--accent); padding: 2px 12px; margin: 8px 0; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -99,3 +99,28 @@ kbd { background: var(--chip); border: 1px solid var(--line); border-radius: 4px
 .rchip { background: var(--chip); border-radius: 10px; padding: 0 8px; font-size: 12px; text-decoration: none; color: var(--accent); }
 #xrStatus { background: transparent; color: var(--muted); font-weight: 400; }
 #xrStatus.warn { background: var(--warn); color: var(--surface); font-weight: 700; }
+
+/* v4: resources first, TL;DR, folded sections (DESIGN-v4.md section 3) */
+.card .res { grid-column: 1; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.card .rchip { font-size: 11px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.rmore { font-size: 11px; color: var(--muted); }
+.tldr { font-size: 17px; font-weight: 700; line-height: 1.45; margin: 4px 0 6px; }
+.kp { margin: 0; padding-left: 20px; } .kp li { margin: 3px 0; }
+.fold > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.fold .prose { margin-top: 8px; line-height: 1.7; overflow-wrap: anywhere; }
+.fold .thread, .fold > .meta { margin-top: 8px; }
+#resBox h4 { margin-top: 0; }
+.rescard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
+.rescard.primary { border-color: var(--accent); border-width: 2px; }
+.rc-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.rc-name { font-weight: 700; font-size: 16px; overflow-wrap: anywhere; text-decoration: none; }
+.rc-name:hover { text-decoration: underline; }
+.rc-url { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.where { background: var(--chip); color: var(--muted); border-radius: 8px; padding: 0 7px; font-size: 11px; }
+.rc-facts { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.rc-read { display: grid; grid-template-columns: 5.5em 1fr; gap: 4px 10px; margin: 8px 0 0; font-size: 13px; }
+.rc-read dt { color: var(--muted); font-size: 12px; padding-top: 1px; } .rc-read dd { margin: 0; overflow-wrap: anywhere; }
+.rc-read ul { margin: 0; padding-left: 18px; }
+.rc-read code { background: var(--chip); border-radius: 4px; padding: 0 5px; font: 12px ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.rc-none { margin-top: 6px; font-size: 12px; }
+.mynote { color: var(--muted); font-style: italic; }

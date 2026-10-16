@@ -138,10 +138,16 @@
     const arch = meta ? (meta.ar ? '<span class="st-ok">📦</span>' : '') : '';
     const au = it.author && (it.author.name || it.author.handle || it.author);
     const pi = meta && meta.pu && DL.pkInfo(meta.pk);
-    const subj = pi ? '<div class="subj">' + pi[0] + ' ' + esc(DL.subjectLabel(meta.pu)) + '</div>' : '';
+    const hasRes = !!(it.res && it.res.length);
+    const subj = pi && !hasRes ? '<div class="subj">' + pi[0] + ' ' + esc(DL.subjectLabel(meta.pu)) + '</div>' : '';
+    // v4: up to 3 resource chips (subject first) + "+n"; index.json carries them (res / res_n)
+    const chipsRow = hasRes ? '<div class="res">' + it.res.map((r) => {
+      const ic = DL.pkInfo(DL.TYPE_PK[r.type] || 's');
+      return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer" title="' + esc(r.url) + '">' + (ic ? ic[0] + ' ' : '') + esc(r.name || shortUrl(r.url)) + '</a>';
+    }).join('') + ((it.res_n || 0) > it.res.length ? '<span class="rmore">+' + (it.res_n - it.res.length) + '</span>' : '') + '</div>' : '';
     return '<div class="card' + (it.id === state.sel ? ' sel' : '') + '" data-id="' + esc(it.id) + '">' +
       '<div class="t">' + esc(titleOf(it)) + '</div>' +
-      '<div class="s">' + esc(it.summary || it.note || it.url || '') + '</div>' + subj +
+      '<div class="s">' + esc(it.tldr || it.summary || it.note || it.url || '') + '</div>' + subj + chipsRow +
       ((meta && meta.ar) ? '<img class="thumb" alt="" data-thumb="' + esc(it.id) + '">' : '<span></span>') +
       '<div class="m">' + status + arch + (au ? '<span>' + esc(au) + '</span>' : '') + '<span>' + esc(fmtDate(it.created_at)) + '</span>' +
       (it.category ? '<span class="tag">' + esc(it.category) + '</span>' : '') + '</div></div>';
@@ -194,12 +200,16 @@
       (del ? '<span class="err">ゴミ箱</span>' : '') + '</div>' +
       (it.url ? '<div><a href="' + esc(safeHref(it.url)) + '" target="_blank" rel="noopener noreferrer">' + esc(shortUrl(it.url)) + '</a></div>' : '') +
       (it.tags && it.tags.length ? '<div style="margin-top:6px">' + chips(it.tags) + '</div>' : '');
-    const analysis = (it.summary ? '<h4>要約</h4><div>' + esc(it.summary) + '</div>' : '') +
-      (it.key_points && it.key_points.length ? '<h4>ポイント</h4><ul>' + it.key_points.map((p) => '<li>' + esc(p) + '</li>').join('') + '</ul>' : '') +
-      (it.note ? '<h4>メモ</h4><div>' + esc(it.note) + '</div>' : '');
+    // v4 order (DESIGN-v4.md section 3, resources moved to the very top at the user's request):
+    // resources -> title + TL;DR -> points -> folded: summary, thread, others' replies, archive -> buttons
+    const folded = !!(it.tldr && it.res_n); // a link without resources keeps its summary (and thread) open and short
+    const analysis = (it.tldr ? '<h4>TL;DR</h4><div class="tldr">' + esc(it.tldr) + '</div>' : '') +
+      (it.key_points && it.key_points.length ? '<h4>ポイント</h4><ul class="kp">' + it.key_points.map((p) => '<li>' + esc(p) + '</li>').join('') + '</ul>' : '') +
+      (it.note ? '<h4>メモ</h4><div>' + esc(it.note) + '</div>' : '') +
+      (it.summary ? '<h4>要約</h4><details class="fold"' + (folded ? '' : ' open') + '><summary>要約を表示</summary><div class="prose">' + esc(it.summary) + '</div></details>' : '');
     const actions = '<div class="actions"><button type="button" data-act="trash">' + (del ? '戻す (d)' : 'ゴミ箱へ (d)') + '</button>' +
       (it.url ? '<button type="button" data-act="open">元URLを開く (o)</button>' : '') + '</div>';
-    box.innerHTML = '<div id="subjBox"></div>' + head + analysis + '<div id="thrBox"></div><h4>アーカイブ</h4><div id="archBox" class="muted">読み込み中…</div>' + actions;
+    box.innerHTML = '<div id="resBox"></div>' + head + analysis + '<div id="thrBox"></div><h4>アーカイブ / メディア</h4><details class="fold" id="archFold"><summary>取得情報とメディアを表示</summary><div id="archBox" class="muted">読み込み中…</div></details>' + actions;
     box.scrollTop = 0;
     const relDone = renderRelated(id); // resolves true when the thread (which already shows the saved post) was drawn
     let snap = null, errMsg = '';
@@ -273,37 +283,60 @@
       '<div class="tt">' + esc(r.text || '') + '</div>' +
       (r.resources && r.resources.length ? '<div class="tr">' + r.resources.map(miniRes).join(' ') + '</div>' : '') + '</div>';
   }
+  const analysisCache = new Map();
+  function loadAnalysis(id) { // analysis/<yyyy>/<id>.json: the AI's per-resource readings (v4)
+    if (!analysisCache.has(id)) analysisCache.set(id, read('analysis/' + id.slice(0, 4) + '/' + id + '.json', 'json').catch(() => null));
+    return analysisCache.get(id);
+  }
+  function whyNoReading(r, a) {
+    if (r.ok === false) return r.error === 'empty body' ? '本文なし(ページに読める本文がありませんでした)' : '取得できませんでした';
+    return a && a.v >= 4 ? 'このリソースの読みはありません' : '未分析(次回の処理で AI が読みます)';
+  }
+  function resCardHtml(r, m, rd, a, dir) {
+    const pi = DL.pkInfo(r.pk);
+    const facts = resFacts(r, m);
+    const read = rd
+      ? '<dl class="rc-read"><dt>何</dt><dd>' + esc(rd.what) + '</dd>' +
+        '<dt>できること</dt><dd>' + ((rd.features || []).length ? '<ul>' + rd.features.map((f) => '<li>' + esc(f) + '</li>').join('') + '</ul>' : '<span class="muted">(なし)</span>') + '</dd>' +
+        '<dt>使い方</dt><dd>' + (rd.usage ? '<code>' + esc(rd.usage) + '</code>' : '<span class="muted">(本文に記載なし)</span>') + '</dd>' +
+        '<dt>向く人</dt><dd>' + esc(rd.audience || '') + '</dd>' +
+        '<dt>自分メモ</dt><dd class="mynote">' + (rd.my_note ? esc(rd.my_note) : '(未記入)') + '</dd></dl>'
+      : ((m && m.description) ? '<div class="sc-desc">' + esc(m.description) + '</div>' : '') + '<div class="muted rc-none">AI の読み: ' + esc(whyNoReading(r, a)) + '</div>';
+    return '<div class="rescard' + (r.subject ? ' primary' : '') + '">' +
+      '<div class="rc-top"><span class="badge">' + (pi ? pi[0] + ' ' : '') + esc(r.type) + (r.subject ? ' · 主題' : '') + '</span>' +
+      '<a class="rc-name" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer">' + esc((rd && rd.name) || DL.resourceTitle(r, m) || shortUrl(r.url)) + ' ↗</a>' +
+      (r.where ? '<span class="where">' + esc(r.where) + '</span>' : '') + '</div>' +
+      '<div class="rc-url">' + esc(shortUrl(r.url)) + '</div>' +
+      (facts ? '<div class="rc-facts">' + esc(facts) + '</div>' : '') + read +
+      (r.text && r.ok !== false ? '<details class="readme" data-path="' + esc(dir + r.text) + '"><summary>' + (r.type === 'github' || r.type === 'hf' ? 'README / モデルカード' : '本文') + (r.bytes ? '(' + fmtN(r.bytes) + ' バイト)' : '') + 'を全文表示</summary><div class="body muted">読み込み中…</div></details>' : '') + '</div>';
+  }
+  // Fills #resBox (every resource of the link as a card, AI reading when there is one) and #thrBox. Resolves to what the thread shows.
   async function renderRelated(id) {
     const rel = await loadRelated(id);
     if (state.sel !== id) return false;
     const it = state.index && state.index.items.find((x) => x.id === id);
-    const repliesDoc = rel ? await loadReplies(id) : null;
+    const [repliesDoc, a] = await Promise.all([rel ? loadReplies(id) : null, rel && rel.resources && rel.resources.length ? loadAnalysis(id) : null]);
     if (state.sel !== id) return false;
     const v = DL.relatedView(rel, it && it.primary_subject, repliesDoc);
-    const sb = $('#subjBox'), tb = $('#thrBox');
-    if (!v || !sb || !tb) return false;
+    const rb = $('#resBox'), tb = $('#thrBox');
+    if (!v || !rb || !tb) return false;
     const dir = LV.archiveDir(id);
-    if (v.primary && v.primary.kind === 'resource') {
-      const r = v.primary.resource;
-      const m = r.meta ? await read(dir + r.meta, 'json').catch(() => null) : null;
-      if (state.sel !== id || !$('#subjBox')) return false;
-      const pi = DL.pkInfo(r.pk);
-      sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">' + (pi ? pi[0] + ' ' : '') + esc(r.type) + '</span> <span class="sc-name">' + esc(resName(r, m)) + '</span>' + (noBody(r) ? ' <span class="muted">(本文なし)</span>' : '') + '</div>' +
-        ((m && m.description) ? '<div class="sc-desc">' + esc(m.description) + '</div>' : '') +
-        (resFacts(r, m) ? '<div class="sc-facts">' + esc(resFacts(r, m)) + '</div>' : '') +
-        '<div class="sc-act"><a href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer">元ページを開く ↗</a></div>' +
-        (r.text ? '<details class="readme" data-path="' + esc(dir + r.text) + '"><summary>README / 本文を全文表示</summary><div class="body muted">読み込み中…</div></details>' : '') + '</div>';
+    const rdOf = (r) => ((a && a.resources) || []).find((x) => x.n === r.n && (!x.url || x.url === r.url)) || ((a && a.resources) || []).find((x) => x.url === r.url) || null;
+    if (v.cards.length) {
+      const metas = await Promise.all(v.cards.map((r) => (r.meta ? read(dir + r.meta, 'json').catch(() => null) : null)));
+      if (state.sel !== id || !$('#resBox')) return false;
+      rb.innerHTML = '<h4>リソース（' + v.cards.length + '）</h4>' + v.cards.map((r, i) => resCardHtml(r, metas[i], rdOf(r), a, dir)).join('');
     } else if (v.primary && v.primary.kind === 'post') {
-      sb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">💬 post</span> <span class="sc-name">' + esc(v.primary.post.author || '') + '</span></div><div class="sc-desc">' + esc((v.primary.post.text || '').slice(0, 200)) + '</div></div>';
+      rb.innerHTML = '<div class="subjcard"><div class="sc-top"><span class="badge">💬 post</span> <span class="sc-name">' + esc(v.primary.post.author || '') + '</span></div><div class="sc-desc">' + esc((v.primary.post.text || '').slice(0, 200)) + '</div></div>';
     }
+    const open = v.cards.length ? '' : ' open'; // no resources: the thread stays open under the short summary
+    const fold = (title, n, unit, inner) => '<h4>' + title + '</h4><details class="fold"' + open + '><summary>' + n + ' ' + unit + 'を表示</summary><div class="thread">' + inner + '</div></details>';
     if (v.thread.length > 1 || v.thread.some((p) => p.quote)) {
-      tb.innerHTML = '<h4>スレッド（親 → 保存ポスト → 本人の続き）</h4><div class="thread">' + v.thread.map((p) => postHtml(p)).join('') + '</div>';
+      tb.innerHTML = fold('スレッド（親 → 保存ポスト → 本人の続き）', v.thread.length, '件のポスト', v.thread.map((p) => postHtml(p)).join(''));
     }
     if (v.replies.length) {
-      tb.innerHTML += '<h4>他の人のリプ（' + v.replies.length + '件）</h4><div class="thread">' + v.replies.map(replyHtml).join('') + '</div>';
+      tb.innerHTML += fold('他の人のリプ（' + v.replies.length + '件）', v.replies.length, '件のリプ', v.replies.map(replyHtml).join(''));
     }
-    const others = v.rest;
-    if (others.length) tb.innerHTML += '<h4>その他のリソース</h4><div class="tr">' + others.map(miniRes).join(' ') + '</div>';
     return { post: DL.threadShowsPost(v), quote: DL.threadShowsQuote(v) };
   }
 

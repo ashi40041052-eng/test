@@ -1,7 +1,7 @@
 // R3/R4 unit tests: linkBlock, ai/ markdown and manifest with related data.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linkBlock, MAX_LINK_CHARS } from '../lib/prompt.mjs';
+import { linkBlock, MAX_LINK_CHARS, cleanResult, readableResources } from '../lib/prompt.mjs';
 import { graphFromThread, relatedContent } from '../lib/related.mjs';
 import { linkMarkdown, manifestLine, subjectOf } from '../lib/ai-build.mjs';
 import { fx } from './related.test.mjs';
@@ -19,12 +19,13 @@ async function bundle(readme = '# Agent Native\n\nhello\n\n## Usage\ntext') {
 const record = { id: ID, url: 'https://x.com/studio_yebisu/status/2110552871565660462', created_at: '2026-10-16T10:23:52+09:00', note: null };
 const content = { ok: true, source_type: 'x', title: 't', author: '@studio_yebisu', text: 'ソースコード\nhttps://github.com/builderio/agent-native' };
 
-test('linkBlock: subject and context come before content, within 20k chars even with huge inputs', async () => {
+test('linkBlock: subject and context come before content, within 30k chars even with huge inputs', async () => {
   const b = await bundle('R'.repeat(300_000));
   b.ledger.posts.forEach((p) => { p.text = 'あ'.repeat(5000); });
   const out = linkBlock(record, { ...content, text: 'x'.repeat(12_000), related: relatedContent(b) });
   assert.ok(out.indexOf('<subject type="github"') > 0);
-  assert.ok(out.indexOf('<subject') < out.indexOf('<context>') && out.indexOf('<context>') < out.indexOf('<resources>') && out.indexOf('<resources>') < out.indexOf('<content'));
+  assert.ok(out.indexOf('<subject') < out.indexOf('<context>') && out.indexOf('<context>') < out.indexOf('<content'));
+  assert.match(out, /<subject type="github" url="[^"]+" n="1"/, 'the subject carries its resource number (it has a body)');
   assert.ok(out.length <= MAX_LINK_CHARS, `length ${out.length}`);
   assert.match(out, /BuilderIO\/agent-native/);
 });
@@ -42,7 +43,7 @@ test('ai markdown: sections in order, frontmatter, manifest pk/pu; without relat
   const analysis = { primary_subject: { kind: 'resource', url: 'https://github.com/BuilderIO/agent-native', name: 'agent-native' }, resource_kind: 'repository' };
   const md = linkMarkdown(item, record, analysis, snap, b);
   const at = (h) => md.indexOf(h);
-  assert.ok(at('## 要約') < at('## ポイント') && at('## ポイント') < at('## 主題リソース') && at('## 主題リソース') < at('### README') && at('### README') < at('## 文脈') && at('## 文脈') < at('## 本文') && at('## 本文') < at('## その他のリソース'), md);
+  assert.ok(at('## ポイント') < at('## 要約') && at('## 要約') < at('## 主題リソース') && at('## 主題リソース') < at('### README') && at('### README') < at('## 文脈') && at('## 文脈') < at('## 本文') && at('## 本文') < at('## その他のリソース'), md);
   const fmText = md.split('\n---\n')[0];
   const fm = Object.fromEntries(fmText.split('\n').slice(1).map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 2)]));
   assert.equal(fm.primary_kind, 'repository');
@@ -120,4 +121,89 @@ test('ai/subjects.md grouped by kind + manifest pn; llms.txt / schema.md mention
   assert.match(files['ai/schema.md'], /pn=/);
   assert.match(files['ai/schema.md'], /subjects\.md/);
   assert.ok(files['ai/llms.txt'].split('\n').length <= 60);
+});
+
+// ---------- v4 ----------
+
+// four resources: subject (github, body), a blog (body, n=2 from the thread), a profile site (body), plus one that had no body
+async function bundle3(bodyLen = 40_000) {
+  const b = await bundle('R'.repeat(bodyLen));
+  const mk = (n, type, url, extra = {}) => ({ n, type, url, key: url, found_in: [], meta: null, text: null, ok: true, error: null, ...extra });
+  Object.assign(b.ledger.resources.find((r) => r.n === 2), { url: 'https://builder.io/blog/x', ok: true });
+  b.ledger.resources.push(
+    mk(3, 'web', 'https://builder.io', { origin: 'profile:@Steve8708' }),
+    mk(4, 'web', 'https://example.org/empty', { ok: false, error: 'empty body' }),
+  );
+  b.res.set(2, { meta: { title: 'Introducing Agent-Native' }, text: 'B'.repeat(bodyLen) });
+  b.res.set(3, { meta: { title: 'Builder.io' }, text: 'P'.repeat(bodyLen) });
+  return b;
+}
+
+test('v4 linkBlock: every resource with a body is a <resource n> block, one without a body is not handed over', async () => {
+  const b = await bundle3(1000);
+  const rel = relatedContent(b);
+  const out = linkBlock(record, { ...content, related: rel });
+  assert.match(out, /<resource n="2" type="web" url="https:\/\/builder.io\/blog\/x" name="Introducing Agent-Native">/);
+  assert.match(out, /<resource n="3" /);
+  assert.ok(!out.includes('<resource n="4"') && !out.includes('example.org/empty'), 'no body -> not handed over (the dashboard shows a plain link card)');
+  assert.ok(!out.includes('<resources>'));
+  assert.deepEqual(readableResources(rel).map((r) => r.n), [1, 2, 3], 'subject first');
+  assert.ok(out.indexOf('<subject') < out.indexOf('<context>') && out.indexOf('<resource n="3"') < out.indexOf('<content'));
+});
+
+test('v4 linkBlock: huge bodies shrink within 30k and other resources shrink before the subject; none is dropped', async () => {
+  const b = await bundle3(200_000);
+  b.ledger.posts.forEach((p) => { p.text = 'あ'.repeat(5000); });
+  const out = linkBlock(record, { ...content, text: 'x'.repeat(12_000), related: relatedContent(b) });
+  assert.ok(out.length <= MAX_LINK_CHARS, `length ${out.length}`);
+  for (const n of [2, 3]) assert.ok(out.includes(`<resource n="${n}"`), `resource ${n} kept`);
+  const run = (c) => Math.max(0, ...(out.match(new RegExp(`${c}{20,}`, 'g')) || []).map((x) => x.length));
+  assert.ok(run('R') >= 1500, 'the subject body keeps its share');
+  assert.ok(run('B') >= 100 && run('B') <= 2500 && run('P') <= 2500, 'other resource bodies are clipped to 2,500 or less');
+  assert.ok(run('R') > run('B'), 'the subject keeps more than the others');
+});
+
+test('v4 cleanResult: only handed-over resources survive, n/url/type come from the ledger, my_note is forced empty, one line tldr', async () => {
+  const rel = relatedContent(await bundle3(100));
+  const r = cleanResult({
+    tldr: ' 一行\nです ', key_points: ['a', 'b', 'c', 'd', 'e', 'f'], tags: [], category: 'x',
+    resources: [
+      { n: 2, url: 'https://evil.example', type: 'github', name: 'Blog', what: '記事', features: ['f1', '', 'f2'], usage: '', audience: 'dev', my_note: 'AI wrote this' },
+      { n: 4, url: 'https://example.org/empty', name: 'x', what: 'guess', features: [], usage: '', audience: '', my_note: '' },
+      { n: 1, url: 'u', name: 'Repo', type: 'github', what: 'w', features: ['f'], usage: 'npx x', audience: 'a', my_note: '' },
+      { n: 2, url: 'dup', name: 'dup', what: 'dup', features: [], usage: '', audience: '', my_note: '' },
+    ],
+  }, rel);
+  assert.equal(r.tldr, '一行 です');
+  assert.deepEqual(r.resources.map((x) => x.n), [1, 2], 'handed-over order, no n=4 (no body), no duplicate n');
+  assert.equal(r.resources[1].url, 'https://builder.io/blog/x');
+  assert.equal(r.resources[1].type, 'web');
+  assert.deepEqual(r.resources[1].features, ['f1', 'f2']);
+  assert.ok(r.resources.every((x) => x.my_note === ''));
+  assert.equal(cleanResult({ key_points: [] }).resources.length, 0, 'no related -> empty');
+});
+
+test('v4 ai markdown: TL;DR -> ポイント -> リソース (all, ordered, with readings) -> 要約 -> 主題リソース; unread resources still get their link', async () => {
+  const b = await bundle3(100);
+  const item = { id: ID, url: record.url, title: 'Agent Native', summary: '長い要約', key_points: ['p1'], tldr: '一行まとめ', category: 'AI', tags: ['a'], status: 'analyzed', created_at: record.created_at, content_type: 'repository' };
+  const snap = { id: ID, captured_at: '2026-10-16T01:00:00Z', captured_by: 'processor', source_type: 'x', text: 'ソースコード', media: [], quote: null, author: { handle: '@studio_yebisu' } };
+  const analysis = {
+    v: 4, tldr: '一行まとめ', primary_subject: { kind: 'resource', url: 'https://github.com/builderio/agent-native', name: 'agent-native' }, resource_kind: 'repository',
+    resources: [{ n: 1, url: 'https://github.com/builderio/agent-native', name: 'BuilderIO/agent-native', type: 'github', what: '何かの基盤', features: ['機能A', '機能B'], usage: 'npx create x', audience: '開発者', my_note: '' },
+      { n: 2, url: 'https://builder.io/blog/x', name: 'Intro', type: 'web', what: '告知記事', features: ['背景'], usage: '', audience: '読みたい人', my_note: '' }],
+  };
+  const md = linkMarkdown(item, record, analysis, snap, b);
+  const at = (h) => md.indexOf(h);
+  assert.ok(at('## TL;DR') < at('## ポイント') && at('## ポイント') < at('## リソース') && at('## リソース') < at('## 要約') && at('## 要約') < at('## 主題リソース') && at('## 主題リソース') < at('## 文脈'), md);
+  const sec = md.slice(at('## リソース'), at('## 要約'));
+  assert.ok(sec.indexOf('agent-native') < sec.indexOf('Intro') && sec.indexOf('Intro') < sec.indexOf('https://builder.io\n'), 'subject, post-side resource, then profile');
+  assert.match(sec, /### BuilderIO\/agent-native \[主題\]\n- URL: https:\/\/github.com\/builderio\/agent-native\n- 種類: github · 出所: 保存ポスト内\n- 何: 何かの基盤\n- できること:\n  - 機能A\n  - 機能B\n- 使い方: npx create x\n- 向く人: 開発者\n- 自分メモ: （未記入）/);
+  assert.match(sec, /- 使い方: （本文に記載なし）/);
+  assert.match(sec, /https:\/\/builder.io\n- 種類: web · 出所: プロフィール @Steve8708\n- AI の読み: なし（未分析）/);
+  assert.match(sec, /example.org\/empty\n- 種類: web\n- AI の読み: なし（本文なし）/);
+  // older analysis (no v4): no TL;DR / readings, the links are still listed
+  const old = linkMarkdown({ ...item, tldr: undefined }, record, { primary_subject: analysis.primary_subject }, snap, b);
+  assert.ok(!old.includes('## TL;DR') && old.includes('## リソース') && old.includes('- AI の読み: なし'));
+  // a link without related data has no リソース section at all
+  assert.ok(!linkMarkdown(item, record, analysis, snap, null).includes('## リソース'));
 });

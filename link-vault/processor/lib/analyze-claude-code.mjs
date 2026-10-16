@@ -22,6 +22,7 @@ const SCHEMA = {
   },
 };
 
+const itemRel = (it) => it.content?.related || null;
 const SYSTEM = 'You are a librarian that summarizes and categorizes saved links. Follow the instructions in the user message and answer only with the requested structured output.';
 
 // cmd.exe quoting, only used when `claude` is a .cmd shim (npm install) that needs a shell.
@@ -74,7 +75,7 @@ function runClaude(bin, args, input, timeoutMs) {
   });
 }
 
-export function createClaudeCodeAnalyzer({ model, bin = 'claude', batchSize = 5, timeoutMs = 10 * 60 * 1000 }) {
+export function createClaudeCodeAnalyzer({ model, bin = 'claude', batchSize = 3, timeoutMs = 10 * 60 * 1000 }) {
   return {
     batchSize,
     // Returns Map<id, result | Error>
@@ -119,7 +120,7 @@ ${items.map((it) => linkBlock(it.record, it.content)).join('\n\n')}`;
       const missing = [];
       for (const it of items) {
         const r = byId.get(it.record.id);
-        if (r) out.set(it.record.id, { ...cleanResult(r), model: parsed.model });
+        if (r) out.set(it.record.id, { ...cleanResult(r, itemRel(it)), model: parsed.model });
         else missing.push(it);
       }
       // The model sometimes answers for only part of a batch: ask once more for the rest, in a smaller call.
