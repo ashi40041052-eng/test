@@ -1,0 +1,33 @@
+{
+ "schema": 1,
+ "id": "20261015-221000-aa11bb22",
+ "url": "https://x.com/dev_notes/status/aa11bb2200",
+ "canonical_url": "https://x.com/dev_notes/status/aa11bb2200",
+ "captured_at": "2026-10-16T01:16:20Z",
+ "captured_by": "phone",
+ "source_type": "x",
+ "title": "Claude Code のフック機能で毎回の確認を自動化する方法",
+ "author": {
+  "name": "Dev Notes",
+  "handle": "@dev_notes",
+  "url": "https://x.com/dev_notes"
+ },
+ "published_at": "2026-10-15T05:30:12Z",
+ "lang": "ja",
+ "text": "Claude Code のフック機能で毎回の確認を自動化する方法\n\nこれがアーカイブされた本文全文です。改行も保持されます。\n\n1. 手順その1\n2. 手順その2\nhttps://example.com/detail",
+ "html_text": null,
+ "quote": null,
+ "article": null,
+ "replying_to": null,
+ "community_note": null,
+ "media": [],
+ "web": null,
+ "stats": {
+  "likes": 120,
+  "reposts": 14,
+  "views": 5400
+ },
+ "raw": {
+  "fxtwitter": {}
+ }
+}

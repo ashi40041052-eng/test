@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "id": "20261015-090000-cc33dd44",
+ "url": "https://x.com/ui_daily/status/cc33dd4400",
+ "canonical_url": "https://x.com/ui_daily/status/cc33dd4400",
+ "captured_at": "2026-10-16T01:16:20Z",
+ "captured_by": "phone",
+ "source_type": "x",
+ "title": "ダッシュボードUIで情報密度を上げる7つの原則",
+ "author": {
+  "name": "UI Daily",
+  "handle": "@ui_daily",
+  "url": "https://x.com/ui_daily"
+ },
+ "published_at": "2026-10-15T05:30:12Z",
+ "lang": "ja",
+ "text": "ダッシュボードUIで情報密度を上げる7つの原則\n\nこれがアーカイブされた本文全文です。改行も保持されます。\n\n1. 手順その1\n2. 手順その2\nhttps://example.com/detail",
+ "html_text": null,
+ "quote": null,
+ "article": null,
+ "replying_to": null,
+ "community_note": null,
+ "media": [
+  {
+   "n": 1,
+   "type": "photo",
+   "url": "https://pbs.twimg.com/media/20261015-090000-cc33dd441.jpg",
+   "width": 800,
+   "height": 450,
+   "alt": "画像1の説明",
+   "local": "media/01.svg",
+   "bytes": 900,
+   "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "n": 2,
+   "type": "photo",
+   "url": "https://pbs.twimg.com/media/20261015-090000-cc33dd442.jpg",
+   "width": 800,
+   "height": 450,
+   "alt": "画像2の説明",
+   "local": "media/02.svg",
+   "bytes": 900,
+   "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+ ],
+ "web": null,
+ "stats": {
+  "likes": 120,
+  "reposts": 14,
+  "views": 5400
+ },
+ "raw": {
+  "fxtwitter": {}
+ }
+}

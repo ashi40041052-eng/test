@@ -155,6 +155,13 @@ Mac / Linux は cron に `0 8,11,14,18,22 * * * cd /path/to/processor && node pr
 - Claude の Projects に `knowledge/` の md をアップロード
 - GitHub 連携できる AI に `link-vault-data` リポジトリを渡す
 
+### PC ダッシュボード・保存時のアーカイブ（app）
+
+- `app/dashboard.html`（アプリと同じ場所に公開されます。例 `https://<ユーザー名>.github.io/<リポジトリ名>/link-vault/app/dashboard.html`）: PC 向けの 3 ペイン画面。左=カテゴリ/期間/状態/タグ、中央=一覧、右=詳細（アーカイブ本文・引用・画像）。キー操作は `j`/`k` 移動、`/` 検索、`o` 元URL、`d` ゴミ箱、`t` ゴミ箱表示。設定（token）はスマホ版と同じブラウザの設定を共有するので、同じオリジンで一度設定すれば動きます。書き込みはゴミ箱の削除/復元だけ。
+- テスト用: `cd link-vault/app && python3 -m http.server 8765` → `http://localhost:8765/dashboard.html?mock=1`（`app/fixtures/mock/` のダミーデータ。トークン不要）。
+- 保存時アーカイブ: X のリンクを送信できた直後に、スマホが fxtwitter から本文と画像（最大4枚）を `archive/<年>/<id>/` に create-only で保存します。保存・送信の成否には影響せず、失敗しても processor が後で拾います。
+- 純ロジックのテスト: `node --test link-vault/app/test`
+
 ## カテゴリについて
 
 - AI は既存カテゴリから選び、どれにも合わないときだけ新カテゴリを作ります
