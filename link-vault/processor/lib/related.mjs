@@ -374,9 +374,13 @@ async function fetchYoutube(res) {
   return { meta: clean({ title: j.title, author_name: j.author_name, thumbnail_url: j.thumbnail_url }), body: null, limit: 0 };
 }
 
-async function fetchWeb(res) {
+export const EMPTY_BODY = 'empty body';
+export async function fetchWeb(res) {
   const g = await fetchGeneric(res.url, LIMITS.webTextChars);
   if (g.source_type === 'file') throw new Error(`unsupported content-type (${g.description || 'non-html'})`);
+  const bodyText = String(g.text || '').replace(/\s+/g, ' ').trim();
+  // a JS-only page yields at most its <title>/description as "text": that is no body
+  if (!bodyText || bodyText === (g.title || '').trim() || bodyText === (g.description || '').trim()) throw new Error(EMPTY_BODY); // JS-only / blank pages: shown as 本文なし, not as a successful fetch
   return { meta: clean({ final_url: g.final_url, title: g.title, description: g.description }), body: g.text, limit: LIMITS.webTextChars };
 }
 
@@ -508,7 +512,7 @@ async function gatherExtras({ p, record, posts, resources, supp, budget, now, lo
       const trig = xrepliesTrigger();
       const self = posts.find((x) => x.role === 'self');
       if (trig && self?.sid) {
-        const r = await captureXReplies({ relatedRoot: p.root, id: record.id, statusUrl: record.url, sid: self.sid, budget, now, log });
+        const r = await captureXReplies({ relatedRoot: p.root, id: record.id, statusUrl: record.url, sid: self.sid, skipSids: posts.map((x) => x.sid), budget, now, log });
         if (r.status === 'done') { supp.xreplies_done = true; supp.xreplies_trigger = trig; for (const u of r.urls) extras.push({ url: u.url, origin: u.own ? 'x_replies_self' : 'x_replies', mentions: u.count }); }
       }
     }

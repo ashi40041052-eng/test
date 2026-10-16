@@ -52,3 +52,14 @@ export async function writeIfChanged(file, content) {
 export function safeFileName(name) {
   return name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || 'untitled';
 }
+
+// Tag drift ("Drama 3" vs "Drama3" vs "drama3"): tags are the same when lowercase + no whitespace/separators match.
+export const tagKey = (t) => String(t ?? '').toLowerCase().replace(/[\s_\-・]+/g, '');
+
+// items: [{tags}] oldest first -> Map(key -> first spelling seen). Callers pass items in a stable order.
+export function canonicalTagMap(tagLists) {
+  const m = new Map();
+  for (const tags of tagLists) for (const t of tags || []) { const k = tagKey(t); if (k && !m.has(k)) m.set(k, t); }
+  return m;
+}
+export const canonTags = (tags, map) => [...new Set((tags || []).map((t) => map.get(tagKey(t)) ?? t))];

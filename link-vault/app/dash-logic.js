@@ -22,7 +22,8 @@
 
   function haystack(it, meta) {
     return [it.title, it.summary, it.note, it.url, it.category, it.author && (it.author.name || it.author.handle || it.author),
-      (it.tags || []).join(' '), (it.key_points || []).join(' '), meta && meta.a, meta && (meta.g || []).join(' ')]
+      (it.tags || []).join(' '), (it.key_points || []).join(' '), meta && meta.a, meta && (meta.g || []).join(' '),
+      meta && meta.pu, meta && meta.pn, it.primary_subject && it.primary_subject.name, it.resource_kind]
       .filter(Boolean).join('\n').toLowerCase();
   }
 
@@ -45,7 +46,7 @@
       if (f.tag && !(it.tags || []).includes(f.tag)) return false;
       if (f.per && PERIODS[f.per] && t0 - new Date(it.created_at).getTime() > PERIODS[f.per]) return false;
       const meta = metaOf(it.id);
-      if (f.sub && (!meta || (meta.pk || '-') !== f.sub)) return false;
+      if (f.sub && ((meta && meta.pk) || '-') !== f.sub) return false;
       if (f.st === 'pending' && it.status === 'analyzed') return false;
       if (f.st === 'analyzed' && it.status !== 'analyzed') return false;
       if (f.st === 'archived' && !(meta && meta.ar)) return false;
@@ -59,12 +60,13 @@
     const cats = new Map(), tags = new Map(), subs = new Map();
     items.forEach((it) => {
       const m = metaOf && metaOf(it.id);
-      if (m && m.pk && m.pk !== '-') subs.set(m.pk, (subs.get(m.pk) || 0) + 1);
+      const pk = (m && m.pk) || '-'; // items without a subject count under "なし" so the counts sum to the total
+      subs.set(pk, (subs.get(pk) || 0) + 1);
       if (it.category) cats.set(it.category, (cats.get(it.category) || 0) + 1);
       (it.tags || []).forEach((t) => tags.set(t, (tags.get(t) || 0) + 1));
     });
     const sort = (m) => Array.from(m, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ja'));
-    return { cats: sort(cats), tags: sort(tags), subs: Array.from(subs, ([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count) };
+    return { cats: sort(cats), tags: sort(tags), subs: Array.from(subs, ([key, count]) => ({ key, count })).sort((a, b) => (a.key === '-') - (b.key === '-') || b.count - a.count) };
   }
 
   function parseManifest(text) {
@@ -93,7 +95,7 @@
   // ---- v3: related graph (related.json, written by the processor; schema in DESIGN-v3.md section 2) ----
   const PK = { r: ['📦', 'リポジトリ'], m: ['🧠', 'モデル'], p: ['📄', '論文'], s: ['🌐', 'サイト'], v: ['▶️', '動画'], x: ['💬', 'ポスト'] };
   const TYPE_PK = { github: 'r', hf: 'm', arxiv: 'p', web: 's', youtube: 'v' };
-  const pkInfo = (pk) => PK[pk] || null;
+  const pkInfo = (pk) => PK[pk] || (pk === '-' ? ['', 'なし'] : null);
   function subjectLabel(pu) { // short display name for a primary url
     try {
       const u = new URL(pu);
@@ -140,7 +142,10 @@
     const parents = rel.posts.filter((p) => p.role === 'parent').sort(byDepth);
     const selfP = rel.posts.filter((p) => p.role === 'self');
     const replies = rel.posts.filter((p) => p.role === 'self_reply').sort((a, b) => (a.depth || 0) - (b.depth || 0));
-    const thread = parents.concat(selfP, replies).map(view);
+    // each resource URL is shown as a chip once: thread first, then replies, then "その他のリソース"
+    const shown = new Set();
+    const firstSeen = (list) => list.filter((r) => { const k = normUrl(r.url); if (shown.has(k)) return false; shown.add(k); return true; });
+    const thread = parents.concat(selfP, replies).map(view).map((p) => Object.assign({}, p, { resources: firstSeen(p.resources) }));
     let primary = null;
     const pr = rel.primary;
     if (aiPrimary && aiPrimary.url) {
@@ -156,8 +161,9 @@
       if (p) primary = { kind: 'post', post: view(p), reason: pr.reason || '' };
     }
     const pk = primary ? (primary.kind === 'resource' ? primary.resource.pk : 'x') : '-';
-    const others = repliesView(repliesDoc, resources);
-    return { thread, resources, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
+    const others = repliesView(repliesDoc, resources).map((r) => Object.assign({}, r, { resources: firstSeen(r.resources) }));
+    const rest = resources.filter((r) => !(primary && primary.resource && primary.resource.n === r.n) && !shown.has(normUrl(r.url)));
+    return { thread, resources, rest, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
   }
 
   g.DashLogic = { PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia };

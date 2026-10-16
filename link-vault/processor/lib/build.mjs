@@ -1,4 +1,4 @@
-import { safeFileName } from './util.mjs';
+import { safeFileName, canonicalTagMap, canonTags } from './util.mjs';
 import { buildAi } from './ai-build.mjs';
 
 // Builds the dashboard index and AI-readable markdown from raw records + analyses.
@@ -52,6 +52,9 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
     items.push(item);
   }
   items.sort((x, y) => new Date(y.created_at) - new Date(x.created_at) || y.id.localeCompare(x.id));
+  // one spelling per tag key (first = oldest link's), so "Drama 3" / "Drama3" count as one tag everywhere
+  const tagMap = canonicalTagMap([...items].reverse().map((i) => i.tags));
+  for (const i of items) if (i.tags) i.tags = canonTags(i.tags, tagMap);
 
   const visible = items.filter((i) => !i.deleted);
   const counts = new Map();

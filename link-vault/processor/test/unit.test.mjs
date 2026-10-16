@@ -89,3 +89,21 @@ test('claude-code analyzer: a link missing from a batch answer is asked again on
     assert.ok(!(res.get(items[1].record.id) instanceof Error));
   } finally { delete process.env.FAKE_CLAUDE_DROP; }
 });
+
+test('tags: spelling variants merge into the first spelling (index, ai tags.json); manifest keeps all tags the budget allows', async () => {
+  const { buildOutputs } = await import('../lib/build.mjs');
+  const { manifestLine } = await import('../lib/ai-build.mjs');
+  const mk = (id) => ({ id, url: `https://x.com/u/status/${id}`, created_at: `2026-10-${id}T00:00:00Z` });
+  const records = [mk('01'), mk('02')];
+  const analyses = new Map([
+    ['01', { id: '01', status: 'analyzed', title: 'a', summary: 's', category: 'C', tags: ['Drama 3', 'TTS'] }],
+    ['02', { id: '02', status: 'analyzed', title: 'b', summary: 's', category: 'C', tags: ['drama3', 'tts', 'A', 'B', 'C', 'D'] }],
+  ]);
+  const { files } = buildOutputs({ records, analyses, categories: [{ name: 'C' }] });
+  const idx = JSON.parse(files['index.json']);
+  assert.deepEqual(idx.items.find((i) => i.id === '02').tags, ['Drama 3', 'TTS', 'A', 'B', 'C', 'D']);
+  assert.deepEqual(Object.keys(JSON.parse(files['ai/tags.json'])).sort(), ['A', 'B', 'C', 'D', 'Drama 3', 'TTS']);
+  assert.deepEqual(JSON.parse(files['ai/tags.json'])['Drama 3'], ['02', '01']);
+  const line = JSON.parse(manifestLine({ id: '02', title: 't', tags: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], status: 'analyzed', created_at: '2026-10-02T00:00:00Z' }, null, null, null));
+  assert.equal(line.g.length, 7, 'no fixed cap of 5');
+});

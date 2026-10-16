@@ -52,6 +52,8 @@ test('ai markdown: sections in order, frontmatter, manifest pk/pu; without relat
   assert.match(fm.related, /archive\/2026\/20261016-012352-c07e399d\/related\.json$/);
   assert.match(md, /\\## Usage/, 'third-party headings are escaped');
   assert.match(md, /#### 引用 @/);
+  assert.equal(md.split('ソースコード').length - 1, 1, 'the saved post text is written once (本文 only)');
+  assert.ok(!md.includes('保存したポスト'), 'no duplicate self block in 文脈');
   const line = manifestLine(item, analysis, snap, record, b);
   assert.ok(Buffer.byteLength(line) <= 400);
   const o = JSON.parse(line);
@@ -86,7 +88,7 @@ test('replies: <replies> in the prompt (shrinks with the budget) and "## 他の�
   const big = { ...b, replies: { replies: Array.from({ length: 30 }, (_, i) => ({ handle: '@u' + i, text: 'あ'.repeat(3000), links: [] })) } };
   assert.ok(linkBlock(record, { ...content, text: 'x'.repeat(12_000), related: relatedContent(big) }).length <= MAX_LINK_CHARS);
   const md = linkMarkdown({ id: ID, url: record.url, created_at: record.created_at, status: 'analyzed', tags: [] }, record, null, null, b);
-  assert.match(md, /replies: 2/);
+  assert.match(md, /\nreplies: 1\n/); // the author's own reply is not counted
   assert.match(md, /## 他の人のリプ\n/);
   assert.match(md, /### @bob \(Bob\) 2026-10-16T01:00:00Z\n\\# fake heading official repo is here\n- link: https:\/\/github.com\/foo\/bar/);
   assert.match(md, /### @studio_yebisu \(Y\) \[本人\]/);
@@ -94,4 +96,23 @@ test('replies: <replies> in the prompt (shrinks with the budget) and "## 他の�
   const none = linkMarkdown({ id: ID, url: record.url, created_at: record.created_at, status: 'analyzed', tags: [] }, record, null, null, await bundle());
   assert.equal(none.includes('## 他の人のリプ'), false);
   assert.match(none, /replies: 0/);
+});
+
+test('ai/subjects.md grouped by kind + manifest pn; llms.txt / schema.md mention them and llms stays <= 60 lines', async () => {
+  const { buildAi } = await import('../lib/ai-build.mjs');
+  const b = await bundle();
+  const item = { id: ID, url: record.url, title: 'Agent Native', summary: '要約', category: 'AI', tags: ['a'], status: 'analyzed', created_at: record.created_at };
+  const plain = { id: '20261001-000000-aaaaaaaa', url: 'https://x.com/u/status/1', title: 'plain', status: 'analyzed', created_at: '2026-10-01T00:00:00Z', tags: [] };
+  const files = buildAi({ items: [item, plain], byId: new Map(), analyses: new Map(), archives: new Map(), cats: [{ name: 'AI', count: 1, description: 'd' }], lastChange: '-', pendingCount: 0, related: new Map([[ID, b]]) });
+  const md = files['ai/subjects.md'];
+  assert.ok(md.indexOf('## repo (1)') > 0 && md.indexOf('## repo (1)') < md.indexOf('## model (0)') && md.indexOf('## model (0)') < md.indexOf('## post (0)'), md);
+  assert.match(md, /\*\*BuilderIO\/agent-native\*\* — The agent-native framework · ★1,234 · license: MIT/);
+  assert.match(md, /\[Agent Native\]\(links\/2026\/[^)]+\.md\) · AI · 2026-10-16/);
+  assert.ok(!md.includes('plain'), 'links without a subject are not listed');
+  const first = JSON.parse(files['ai/manifest.jsonl'].split('\n')[0]);
+  assert.equal(first.pn, 'BuilderIO/agent-native');
+  assert.match(files['ai/llms.txt'], /subjects\.md/);
+  assert.match(files['ai/schema.md'], /pn=/);
+  assert.match(files['ai/schema.md'], /subjects\.md/);
+  assert.ok(files['ai/llms.txt'].split('\n').length <= 60);
 });
