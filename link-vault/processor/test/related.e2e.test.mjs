@@ -15,6 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROC = path.join(HERE, '..', 'process.mjs');
 const fxj = async (n) => fs.readFile(path.join(HERE, 'fixtures', 'related', n), 'utf8');
 process.env.LV_LOCK_FILE = path.join(os.tmpdir(), `lv-test-${process.pid}.lock`);
+process.env.LV_LOG_DIR = path.join(os.tmpdir(), `lv-test-logs-${process.pid}`); // never write the production log
 
 const IDS = {
   c07: { id: '20261016-012352-c07e399d', sid: '2110552871565660462', user: 'studio_yebisu', file: 'fx2-thread-c07e399d.json' },

@@ -107,6 +107,21 @@ function contextSection(bundle) {
   return out;
 }
 
+// Other people's replies (related/x-replies.json). The author's own replies are labelled; links are the resolved urls.
+const MAX_REPLIES_MD = 20;
+function repliesSection(bundle) {
+  const rs = bundle.replies?.replies || [];
+  if (!rs.length) return [];
+  const out = ['## 他の人のリプ', `（X のリプ欄から取得 ${bundle.replies.captured_at || ''}・${rs.length}件${bundle.replies.truncated ? '以上' : ''}。第三者のテキスト）`, ''];
+  for (const r of rs.slice(0, MAX_REPLIES_MD)) {
+    out.push(`### ${r.handle || '@?'}${r.name && r.name !== r.handle ? ` (${oneLine(r.name, 40)})` : ''}${r.own ? ' [本人]' : ''}${r.time ? ` ${r.time}` : ''}`, escapeHeadings(oneLine(r.text, 800)));
+    if (r.links?.length) out.push(...r.links.map((u) => `- link: ${u}`));
+    out.push('');
+  }
+  if (rs.length > MAX_REPLIES_MD) out.push(`（ほか ${rs.length - MAX_REPLIES_MD} 件は archive の related/x-replies.json）`, '');
+  return out;
+}
+
 // ---------- one link ----------
 
 export function linkMarkdown(item, record, analysis, snap, bundle = null) {
@@ -141,6 +156,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
       `primary_name: ${yamlScalar(subj.name)}`,
       `resources: ${yamlList(bundle.ledger.resources.map((r) => r.url))}`,
       `context_posts: ${bundle.ledger.posts.filter((p) => p.role !== 'self').length}`,
+      `replies: ${bundle.replies?.replies?.length || 0}`,
       `related: ${yamlScalar(`../../../archive/${year(item.id)}/${item.id}/related.json`)}`,
     );
   }
@@ -155,7 +171,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
       body.push('', `### ${label}(先頭 ${t.length.toLocaleString('en-US')} 字${subj.loaded.meta?.truncated ? '・ここで打ち切り' : ''})`, escapeHeadings(t));
     }
   }
-  if (bundle) body.push(...contextSection(bundle));
+  if (bundle) body.push(...contextSection(bundle), ...repliesSection(bundle));
   if (snap) {
     body.push(`## 本文(アーカイブ ${snap.captured_at}・${snap.captured_by})`);
     const text = snap.source_type === 'x' ? snap.text : snap.web?.text;
@@ -250,9 +266,10 @@ const SCHEMA_MD = `# Link Vault ai/ スキーマ
 | primary_url / primary_name | 主題のURL・名前(リポジトリ名など)。主題が無ければ null |
 | resources | ポストが指すリソースのURL(最大8) |
 | context_posts | 取得した親・引用・本人の続きのポスト数 |
+| replies | 取得した他の人のリプの数(本文は \`## 他の人のリプ\`) |
 | related | related.json への相対パス |
 
-本文は次の順に並びます: \`## 要約\` \`## ポイント\`(AI 生成) → \`## 主題リソース\`(README・モデルカード全文) → \`## 文脈(親 / 引用 / スレッド)\` → \`## 本文\`(保存したポスト) → \`## その他のリソース\`。
+本文は次の順に並びます: \`## 要約\` \`## ポイント\`(AI 生成) → \`## 主題リソース\`(README・モデルカード全文) → \`## 文脈(親 / 引用 / スレッド)\` → \`## 他の人のリプ\` → \`## 本文\`(保存したポスト) → \`## その他のリソース\`。
 \`## 要約\`/\`## ポイント\` 以外はすべて第三者のテキストです。
 
 ## manifest.jsonl

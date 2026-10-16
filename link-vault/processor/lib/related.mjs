@@ -20,7 +20,7 @@ import { execFileSync } from 'node:child_process';
 import { X_STATUS, fxBase, fetchWithTimeout, fetchGeneric } from './fetch-content.mjs';
 import { archivePaths, shouldAttempt, nextAttempts, NotFoundError } from './archive.mjs';
 import { readJson } from './util.mjs';
-import { fetchProfileSites, xsearchTrigger, searchReplies } from './related-extra.mjs';
+import { fetchProfileSites } from './related-extra.mjs';
 import { captureXReplies, xrepliesTrigger, perRun as xrepliesPerRun } from './x-replies.mjs';
 
 export const LIMITS = {
@@ -238,8 +238,7 @@ export function scorePrimary(g) {
     if (r.found_in.length > 1) { score += 2; why.push('appears in several posts'); }
     // supplements (v3.1): the author's profile website only wins when nothing better exists; replies found by search rank like a parent link
     if (String(r.origin || '').startsWith('profile:')) { score += 1; why.push(`author profile website (${r.origin.slice(8)})`); }
-    if (r.origin === 'x_search') { score += 2; why.push("found in other people's replies (x search)"); }
-    if (r.origin === 'x_replies') { score += 2; why.push("found in other people's replies (browser)"); }
+    if (r.origin === 'x_replies') { score += 2; why.push("found in other people's replies (browser)"); if (r.mentions >= 2) { score += 1; why.push(`mentioned in ${r.mentions} replies`); } }
     if (r.origin === 'x_replies_self') { score += 3; why.push("found in the author's own reply (browser)"); }
     return { ...r, score, order, why: why.join('; ') };
   });
@@ -444,7 +443,7 @@ async function walkParents(json, rootId, log) {
 
 // ---------- orchestrator ----------
 
-export const newRelatedBudget = () => ({ resources: LIMITS.runResourceBudget, arxiv: LIMITS.runArxivBudget, searches: Number(process.env.LV_XSEARCH_PER_RUN ?? 3), xreplies: xrepliesPerRun() });
+export const newRelatedBudget = () => ({ resources: LIMITS.runResourceBudget, arxiv: LIMITS.runArxivBudget, xreplies: xrepliesPerRun() });
 
 async function fetchAll(p, resources, budget, log) {
   const started = Date.now();
@@ -469,23 +468,23 @@ async function fetchAll(p, resources, budget, log) {
 }
 
 
-// ---------- supplements: profile website + x search (v3.1) ----------
+// ---------- supplements: profile website + x replies (v3.1/v3.2) ----------
 
 // -> new resources [{url,type,key,found_in:[],origin,...}] not already in `have`, in order.
 function newFromExtras(have, extras) {
   const seen = new Set(have.map(dedupeKey));
   const out = [];
-  for (const { url, origin } of extras) {
+  for (const { url, origin, mentions } of extras) {
     const c = classifyUrl(url);
     if (!c || seen.has(dedupeKey(c))) continue;
     seen.add(dedupeKey(c));
-    out.push({ ...c, found_in: [], origin });
+    out.push({ ...c, found_in: [], origin, ...(mentions > 1 ? { mentions } : {}) });
   }
   return out;
 }
 
 /*
- * posts: ledger-style posts; resources: ledger/graph resources; supp: {profile_done, xsearch_done} (mutated).
+ * posts: ledger-style posts; resources: ledger/graph resources; supp: {profile_done, xreplies_done} (mutated).
  * Returns the extra {url, origin} candidates. Never throws.
  */
 async function gatherExtras({ p, record, posts, resources, supp, budget, now, log, primary }) {
@@ -505,22 +504,12 @@ async function gatherExtras({ p, record, posts, resources, supp, budget, now, lo
     }
   } catch (e) { log(`profile fallback failed: ${e.message}`); }
   try {
-    if (!supp.xsearch_done) {
-      const trig = xsearchTrigger(posts, [...resources, ...extras]);
-      if (trig) {
-        const self = posts.find((x) => x.role === 'self');
-        const r = await searchReplies({ relatedRoot: p.root, id: record.id, handle: self?.author, sid: self?.sid, publishedAt: self?.published_at, budget, now, log });
-        if (r.state === 'done') { supp.xsearch_done = true; supp.xsearch_trigger = trig; for (const url of r.urls) extras.push({ url, origin: 'x_search' }); }
-      }
-    }
-  } catch (e) { log(`x search failed: ${e.message}`); }
-  try {
     if (!supp.xreplies_done) {
-      const trig = xrepliesTrigger(posts, [...resources, ...extras], { primary, savedAt: record.created_at, now });
+      const trig = xrepliesTrigger();
       const self = posts.find((x) => x.role === 'self');
       if (trig && self?.sid) {
         const r = await captureXReplies({ relatedRoot: p.root, id: record.id, statusUrl: record.url, sid: self.sid, budget, now, log });
-        if (r.status === 'done') { supp.xreplies_done = true; supp.xreplies_trigger = trig; for (const u of r.urls) extras.push({ url: u.url, origin: u.own ? 'x_replies_self' : 'x_replies' }); }
+        if (r.status === 'done') { supp.xreplies_done = true; supp.xreplies_trigger = trig; for (const u of r.urls) extras.push({ url: u.url, origin: u.own ? 'x_replies_self' : 'x_replies', mentions: u.count }); }
       }
     }
   } catch (e) { log(`x replies failed: ${e.message}`); }
@@ -547,7 +536,7 @@ async function supplementExisting(p, record, budget, now, log) {
   if (fresh.length) supp.resources_added_at = now.toISOString(); // --reanalyze-related re-reads links changed after their analysis
   const fetched = fresh.length ? await fetchAll(p, fresh, budget, log) : new Map();
   const added = fresh.map((r) => ({
-    n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, origin: r.origin,
+    n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, origin: r.origin, ...(r.mentions ? { mentions: r.mentions } : {}),
     meta: null, text: null, bytes: 0, ok: false, error: null, ...(fetched.get(r.n) || {}),
   }));
   const resources = [...ledger.resources, ...added];
@@ -595,7 +584,7 @@ export async function captureRelated({ dir, record, budget = newRelatedBudget(),
       schema: 1, id: record.id, captured_at: now.toISOString(), captured_by: 'processor', thread_from: from, root: graph.root,
       posts: graph.posts,
       resources: graph.resources.map((r) => ({
-        n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, ...(r.origin ? { origin: r.origin } : {}),
+        n: r.n, url: r.url, type: r.type, key: r.key, ...(r.hfKind ? { hfKind: r.hfKind } : {}), found_in: r.found_in, ...(r.origin ? { origin: r.origin } : {}), ...(r.mentions ? { mentions: r.mentions } : {}),
         meta: null, text: null, bytes: 0, ok: false, error: null, ...(fetched.get(r.n) || {}),
       })),
       primary: graph.primary,
@@ -628,7 +617,7 @@ async function fillMissing(p, budget, now, log) {
 
 // ---------- reading (analysis input / ai build) ----------
 
-// { ledger, res: Map<n, {meta, text}> } or null when there is no related.json.
+// { ledger, res: Map<n, {meta, text}>, replies: x-replies.json|null } or null when there is no related.json.
 export async function loadRelated(dir, id) {
   const p = relatedPaths(dir, id);
   const ledger = await readJson(p.related, null);
@@ -640,7 +629,9 @@ export async function loadRelated(dir, id) {
     try { text = await fs.readFile(path.join(p.root, r.text || `related/res/${resBase(r)}.md`), 'utf8'); } catch {}
     if (meta || text) res.set(r.n, { meta, text });
   }
-  return { ledger, res };
+  // other people's replies (related/x-replies.json, captured with bsk); null when never captured
+  const replies = await readJson(path.join(p.root, 'related', 'x-replies.json'), null);
+  return { ledger, res, replies: Array.isArray(replies?.replies) ? replies : null };
 }
 
 // Display name of a resource for headings and lists.
@@ -655,6 +646,7 @@ export function relatedContent(loaded) {
   return {
     primary: ledger.primary,
     posts: ledger.posts,
+    replies: loaded.replies?.replies || [],
     resources: ledger.resources.map((r) => {
       const l = res.get(r.n);
       return { ...r, name: resourceName(r, l), meta: l?.meta || null, text: l?.text || null };

@@ -18,7 +18,7 @@ v1/v2 の約束(`links/` `events/` `snapshot.json` 不変、`analysis/` 再生�
 ## 1. 調査で確認した事実(2026-10-16、curl)
 
 - `api.fxtwitter.com/2/thread/<id>` → `{status, thread:[...], author}`。`thread` は**投稿者本人の連なり**(先祖 → 保存ポスト → 本人の後続リプ)が時系列で入る。c07e399d なら [親解説, ソースコード, 公式サイト] の 3 件、a27279bf なら [本文, Comfy-UI版 HF, Basemodel HF] の 3 件。各要素に `raw_text.facets[type=url].replacement`(t.co 展開済み)・`card`・`quote`(1 段、本文+media)・`media`・`replying_to{status}` がある。**これだけで親チェーン・自己スレッド・引用が一度に取れる。** v1 `/status` に無かった `replying_to.status` も v2 には必ずある。
-- `thread` は本人の自己リプだけ。他人の返信(「リプ欄の情報」)は取れない。X 公式 API は有料、`grok-api` CLI は image/video/auth のみで検索は MCP `search_x` だけ(利用枠あり・結果が本文の生データでない)。**→ 他人のリプは v3 の対象外**(やらないこと参照)。保存ポスト自身が他人への返信なら、親は `status.replying_to.status` を `/2/status/<id>` で辿る(本人以外でも取れる。N=3 まで)。
+- `thread` は本人の自己リプだけ。他人の返信(「リプ欄の情報」)は取れない。X 公式 API は有料。**→ 他人のリプは v3 本体の対象外**(v3.2 でブラウザ経由に追加)。保存ポスト自身が他人への返信なら、親は `status.replying_to.status` を `/2/status/<id>` で辿る(本人以外でも取れる。N=3 まで)。
 - GitHub: `gh api repos/<o>/<r>` と `/readme`(base64)。Mac の `gh` は認証済み(5000 req/h)。無認証でも 60/h で足りる(processor は `gh auth token` があれば使う)。
 - Hugging Face: `huggingface.co/api/{models|datasets|spaces}/<id>`(200、`cardData, tags, pipeline_tag, downloads, likes, lastModified, siblings, gated`)+ `/<id>/raw/main/README.md`(モデルカード本文)。無認証で可。
 - arXiv: `export.arxiv.org/api/query?id_list=` は連打で 429。`arxiv.org/abs/<id>` は HTML 200。**1 回/3 秒、1 ランに 20 件まで**。
@@ -150,7 +150,7 @@ fixture は**実 API の応答を保存して使う**: `test/fixtures/related/fx
 
 ## 11. やらないこと
 
-- 他人の返信の収集(無料・安定な経路が無い)。X 検索(Grok)・ログイン・HTML スクレイピング。fxtwitter 以外の X 経路の追加。
+- 他人の返信の収集(無料・安定な経路が無い)。(ブラウザ経由の取得は v3.2 で追加)。fxtwitter 以外の X 経路の追加。
 - 引用の引用(2 段以上)、親チェーン 3 段超、自己リプ 5 件超、x.com リンクの再帰取得(1 ホップで止める)。
 - GitHub のコード本体・issues・リリース、HF の重みファイル、arXiv PDF、YouTube の字幕/説明文、Web ページの画像。PDF 全般。
 - `snapshot.json`・`links/`・`events/` の変更、v2 の `ai/` 構造の破壊(追加のみ)、`index.html`/`app.js` の UI 変更、新しいサーバー・ストレージ。
@@ -165,24 +165,22 @@ fixture は**実 API の応答を保存して使う**: `test/fixtures/related/fx
 - **レート制限**: GitHub は認証で回避、arXiv は 3 秒間隔+1 ラン 20 件、HF は無認証で十分。429 は `error` に残して次ランで再試行(related.json は作る)。
 - **バッチ 8→5 件で分析ランの回数が増える**: 1 ラン最大 40 件の既定は変えず、1 回の `claude` 呼び出しのトークンが v2 と同程度に収まることを優先。
 
-## 付録: v3.1 補足取得(プロフィールのサイト・Grok X 検索)
+## 付録: v3.1 補足取得(プロフィールのサイト)
 
-§11 の「他人の返信は取らない」を、**条件付き・枠つき**で緩める。コードは `processor/lib/related-extra.mjs`。どちらも best effort で、失敗してもアーカイブ・分析は止めない。
+§11 の「他人の返信は取らない」を、プロフィールのサイト取得で一部緩める(他人のリプは v3.2)。コードは `processor/lib/related-extra.mjs`。best effort で、失敗してもアーカイブ・分析は止めない。(旧 Grok X 検索は削除済み(removed): 関連コード・`LV_XSEARCH`・クールダウンファイルを撤去。)
 
 - **A) プロフィールのサイト(無料)**: 引用/親ポストの投稿者で、そのポストに URL が無いアカウント(動画だけの公式引用など。最大 2 人)について `https://api.fxtwitter.com/<handle>` の `user.website.url` と `raw_description.facets` の URL を候補にする。linktr.ee / lit.link / bento.me / beacons.ai 等のハブなら HTML を取り、アフィリエイト・SNS・フォント等を除いた外向きリンクから**公式ドメイン(アカウント名・表示名に近いホスト)優先**で 1 サイト 1 リンク、最大 3 件。`resources[].origin = "profile:@handle"`、主題スコア **+1**(他に何も無いときだけ勝つ。公式引用ポスト主題=2 には負ける)。
-- **B) 他人のリプ(Grok X 検索、枠つき)**: 発動条件は (1) 保存/親ポスト本文が `リプ|リプライ|コメント欄|返信|👇|below|in replies|link in reply|comments` を含み、かつ本人スレッド(self/self_reply)にリソース URL が無い、または (2) 全部取ったあとリソースが 0 件(プロフィール由来は数えない)で本文がツール/製品の話(`ツール|アプリ|モデル|公開|Introducing|launch|SDK|open source…`)。`grok-api search x --query … --output json --from-date --to-date`(保存日の前日〜+3 日)を実行し、結果中の URL を `origin = "x_search"`(主題スコア +2)で資源にする。生の応答は `related/x-search.json` に **create-only** で保存(1 リンク 1 回。エラー時は `x-search-attempts.json` に記録、3 回失敗で 1 日 1 回)。
-- **既存の related.json への追記**: 既存の項目(posts・resources・primary の根拠)は変えず、`resources` の末尾に `origin` 付きで足し、`supplement` に `profile_done` / `xsearch_done` / `resources_added_at` を書く(一時ファイル→rename)。資源が増えた分析済みリンクは `--reanalyze-related` が `resources_added_at > analyzed_at` で拾い直す。プロフィール取得が通信エラーのときは次ランに回し、5 回で諦める。rebase で archive/ が衝突したら従来どおりリモート側が勝つ(次ランで足し直す)。
-- 枠: 1 ランあたり `LV_XSEARCH_PER_RUN`(既定 3)。応答/終了コードが spending-limit・quota・rate・auth 系なら `processor/logs/xsearch-cooldown.json`(`LV_XSEARCH_COOLDOWN_FILE`)に 24 時間のクールダウンを書き、その間は検索しない。`LV_XSEARCH=0` で無効、`LV_GROK_BIN` でコマンド差し替え(テストは偽バイナリ)、`LV_XSEARCH_FORCE=1` は動作確認用(条件を無視)。`LV_FXTWITTER_BASE` を差し替えているのに `LV_GROK_BIN` が無い環境では実バイナリを絶対に呼ばない。
-- **既存の related.json への追記**: `related.json` は作成時のみ書くが、補足取得だけは**追記専用**で既存台帳を更新する(既存の資源・番号は変えない。新資源は番号を続けて付け、`primary` だけ再計算、`supplement:{v:1,profile_done,xsearch_done}` を記録。tmp+rename)。`supplement` が済んだリンクは再実行しても何も変わらない。
+- **既存の related.json への追記**: `related.json` は作成時のみ書くが、補足取得だけは**追記専用**で既存台帳を更新する(既存の資源・番号は変えない。新資源は番号を続けて付け、`primary` だけ再計算、`supplement:{v:1,profile_done,xreplies_done}` を記録。tmp+rename)。`supplement` が済んだリンクは再実行しても何も変わらない。
 - 実応答 fixture: `test/fixtures/related/fx-user-MireloAI.json`, `fx-user-bfl_ai.json`, `hub-linktree-mirelo.html`(`record-fixtures.sh` に追記)。テスト: `test/related.extra.test.mjs`。
 
 ## 付録: v3.2 他人のリプをブラウザで読む(既定の返信ソース)
 
-Grok X 検索の代わりに、**本人が自分でログインした X のセッション**を実ブラウザで読む。ドライバは **`bsk`(browser-skill CLI)で本人の Chrome(X ログイン済み)を操作**する(`processor/lib/x-browser-bsk.mjs`。専用ログイン・専用プロファイル・Playwright は廃止)。Grok 経路(`LV_XSEARCH=1` のときだけ)は従来どおり残し、既定は無効のまま。
+**本人が自分でログインした X のセッション**を実ブラウザで読む。ドライバは **`bsk`(browser-skill CLI)で本人の Chrome(X ログイン済み)を操作**する(`processor/lib/x-browser-bsk.mjs`。専用ログイン・専用プロファイル・Playwright は不要)。
 
 - **ログイン/前提**: 本人の Chrome が X にログイン済みで、`bsk status` が接続済みであること。`bsk` が無い/未接続なら 1 行ログを出してスキップ(失敗にしない)。ログイン壁を検出したら `logs/x-login-required.json` を書いて止まる(Chrome で X にログイン後、そのファイルを消すと再開)。資格情報・クッキーは読まない/表示しない。`LV_XREPLIES=0` で無効、`LV_XREPLIES_FORCE=1` で発動条件を無視(確認用)。
 - **取得** (`processor/lib/x-replies.mjs`, ブラウザ層は注入可能なドライバ): `bsk session start` → `navigate` → `evaluate`(ページ内 JS が最上位の `article` から投稿者・本文・時刻・外向きリンクを抽出。X の新 DOM は testid/`<time>` が無いので JS 側で吸収し、パーサ向けの HTML に直して渡す)。記事が出るまで待ち、最大3回、1.5〜4 秒の間隔でゆっくりスクロール。セッションは finally で必ず `session stop`。メイン投稿以外の記事から投稿者・本文・時刻・permalink・外向きリンクを最大 30 件。t.co は `title`/表示テキストの実 URL を優先し、無ければ HEAD(リダイレクト非追従)で解決(ブラウザ遷移なし)。ログイン壁(`/login` への遷移、`loginButton` 等)は `{status:'login_required'}` を返し、`logs/x-login-required.json` を**一度だけ**書く(これがある間は全リンクで取得を止める=再試行の嵐なし。`x-login` が ✓ で消す)。
 - **保存(create-only)**: `archive/<y>/<id>/related/x-replies.json` = `{schema:1,id,status_url,sid,captured_at,main:{handle,name},truncated,replies:[{n,handle,name,text,time,permalink,own,links[]}],urls:[{url,own}]}`。0 件でも書く(= 1 リンク 1 回)。失敗は `x-replies-attempts.json`、3 回で打ち切り。
-- **候補とスコア**: リプ内 URL は `origin="x_replies"`(+2、v3.1 の x_search と同じ)、本人自身のリプは `x_replies_self`(+3)。`related.json` には v3.1 と同じ追記専用の仕組みで足し、`supplement.xreplies_done` を記録。
-- **発動**: x_search と同条件(本文がリプ欄を指し自己スレッドに URL 無し/資源 0 件でツール系の話)に加え、**直近 7 日に保存され主題が resource でないリンクは常に**。枠は 1 ランあたり `LV_XREPLIES_PER_RUN`(既定 4。20 分ごとの `--archive-only` と本ランのどちらでも)、`logs/x-browser.lock` で同時に 1 ブラウザだけ。playwright/プロファイルが無ければログ 1 行で静かにスキップ。`LV_XREPLIES=0` で無効(既定はプロファイルがあれば有効)。`LV_FXTWITTER_BASE` を差し替えたテスト環境では注入ドライバが無い限り実ブラウザを起動しない。
+- **候補とスコア**: リプ内 URL は `origin="x_replies"`(+2。2 件以上のリプに出れば +1)、本人自身のリプは `x_replies_self`(+3)。`related.json` には追記専用の仕組みで足し、`supplement.xreplies_done` を記録。保存ポスト自身にリソース URL があればそれ(+5〜)が勝つが、無ければリプ内のリンクが主題になれる。
+- **発動**: **すべての X リンクを 1 回ずつ**(保存ポストの主題が既にリソースでも取る=リプが主題を覆すことがあるため)。枠は 1 ランあたり `LV_XREPLIES_PER_RUN`(既定 4。20 分ごとの `--archive-only` と本ランのどちらでも)、`logs/x-browser.lock` で同時に 1 ブラウザだけ。`bsk` が無い/未接続ならログ 1 行で静かにスキップ。`LV_XREPLIES=0` で無効、`LV_XREPLIES_FORCE=1` は理由表示のみ。`LV_FXTWITTER_BASE` を差し替えたテスト環境では注入ドライバが無い限り実ブラウザを起動しない。
+- **利用側**: `loadRelated` が `related/x-replies.json` を読み、(1) `ai/links/*.md` に `## 他の人のリプ`(投稿者・本文・リンク。frontmatter `replies: N`)、(2) 分析プロンプトに `<replies>`(文字数枠で縮む)、(3) ダッシュボードのスレッド表示に「他の人のリプ」(リソースのチップ付き)。`--reanalyze-related` は、リプがあるのに分析が見ていないリンク(`related_used.replies` 無し、またはリプ取得が分析より新しい)を 1 回だけ再分析する。ログの置き場は `LV_LOG_DIR`(既定 `processor/logs`。テストは一時ディレクトリ)。
 - テスト: `test/x-replies.test.mjs`(偽ドライバ+HTML fixture、実ブラウザ/ネットワークなし)。

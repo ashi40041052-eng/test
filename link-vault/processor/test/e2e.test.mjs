@@ -15,6 +15,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // hermetic: ignore the developer's processor/.env, and never reach the real FxTwitter
 process.env.LV_NO_ENV_FILE = '1';
 process.env.LV_LOCK_FILE = path.join(os.tmpdir(), `lv-test-${process.pid}.lock`); // test files run in parallel
+process.env.LV_LOG_DIR = path.join(os.tmpdir(), `lv-test-logs-${process.pid}`); // never write the production log
 process.env.LV_FXTWITTER_BASE = 'http://127.0.0.1:9';
 
 test('api backend: analyzes new links and never touches links/', async () => {
