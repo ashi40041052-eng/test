@@ -1,15 +1,14 @@
 /*
- * Other people's replies on X, read with the user's OWN logged-in session in a real (headless) Chromium
+ * Other people's replies on X, read with the user's OWN logged-in Chrome through bsk (browser-skill CLI)
  * (DESIGN-v3.md addendum "v3.2"). Replaces Grok X search as the default replies source.
  * The browser is behind a tiny driver interface so tests never start one:
  *   driver.loadThread(url, { maxScrolls, delay }) -> { finalUrl, snapshots: [html, ...] }   (page HTML after load / each scroll)
- * Credentials and cookie values are never read, logged or stored (only the cookie *name* auth_token is checked in x-login.mjs).
- * Env: LV_XREPLIES (0 off / 1 on; default on when the profile dir exists), LV_X_PROFILE (~/.link-vault/x-profile),
- *      LV_XREPLIES_PER_RUN (4), LV_XREPLIES_LOGIN_FILE, LV_XREPLIES_LOCK_FILE.
+ * Credentials and cookie values are never read, logged or stored.
+ * Env: LV_XREPLIES (0 off / 1 on; default on when bsk is connected), LV_XREPLIES_FORCE=1 (debug: ignore the trigger rules),
+ *      LV_XREPLIES_PER_RUN (4), LV_XREPLIES_LOGIN_FILE, LV_XREPLIES_LOCK_FILE, LV_BSK_BIN.
  */
 import fs from 'node:fs/promises';
 import fssync from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson } from './util.mjs';
@@ -22,12 +21,11 @@ export const MAX_REPLIES = 30;
 export const MAX_URLS = 8;
 const MAX_ATTEMPTS = 3;
 
-export const profileDir = () => process.env.LV_X_PROFILE || path.join(os.homedir(), '.link-vault', 'x-profile');
 const loginFile = () => process.env.LV_XREPLIES_LOGIN_FILE || path.join(HERE, '..', 'logs', 'x-login-required.json');
 const lockFile = () => process.env.LV_XREPLIES_LOCK_FILE || path.join(HERE, '..', 'logs', 'x-browser.lock');
 export const perRun = () => Number(process.env.LV_XREPLIES_PER_RUN ?? 4);
 
-let driver = null; // tests inject one; production lazily builds the playwright driver
+let driver = null; // tests inject one; production lazily builds the bsk driver
 export const setXrepliesDriver = (d) => { driver = d; };
 let resolver = null; // t.co -> final url (HEAD, no browser); injectable
 export const setXrepliesResolver = (f) => { resolver = f; };
@@ -38,7 +36,8 @@ export function xrepliesEnabled() {
   // hermetic: a test double for fxtwitter without an injected driver must never reach a real browser
   if (process.env.LV_FXTWITTER_BASE) return false;
   if (process.env.LV_XREPLIES === '1') return true;
-  return fssync.existsSync(profileDir());
+  if (process.env.NODE_TEST_CONTEXT) return false; // never reach a real browser from `node --test`
+  return true; // availability of bsk is checked once, lazily, in captureXReplies (one log line, no failure)
 }
 
 // ---------- pure extraction (fixture-tested) ----------
@@ -127,8 +126,8 @@ export const loginRequired = () => fssync.existsSync(loginFile());
 async function noteLoginRequired(now, log) {
   try {
     await fs.mkdir(path.dirname(loginFile()), { recursive: true });
-    await fs.writeFile(loginFile(), JSON.stringify({ at: now.toISOString(), message: 'X にログインが必要です。ターミナルで `npm run x-login` を実行してログインしてください(完了すると自動で再開します)。' }, null, 2) + '\n', { flag: 'wx' });
-    log('x-replies: login required (wrote logs/x-login-required.json; run `npm run x-login`)');
+    await fs.writeFile(loginFile(), JSON.stringify({ at: now.toISOString(), message: 'Chrome で X にログインしてください(通常の Chrome で x.com にログイン後、このファイルを削除すると再開します)。' }, null, 2) + '\n', { flag: 'wx' });
+    log('x-replies: login required (wrote logs/x-login-required.json; log in to X in Chrome, then delete the file)');
   } catch (e) { if (e.code !== 'EEXIST') throw e; }
 }
 
@@ -154,6 +153,7 @@ async function withLock(fn) {
  * primary subject is not a resource. Pure.
  */
 export function xrepliesTrigger(posts, resources, { primary, savedAt, now = new Date() } = {}) {
+  if (process.env.LV_XREPLIES_FORCE === '1') return 'forced';
   const t = xsearchTriggerNoForce(posts, resources);
   if (t) return t;
   const saved = Date.parse(savedAt || '');
@@ -185,8 +185,8 @@ export async function captureXReplies({ relatedRoot, id, statusUrl, sid, budget,
   if (att.count >= MAX_ATTEMPTS) return { status: 'skipped', urls: [] };
   let drv = driver;
   if (!drv) {
-    try { drv = await (await import('./x-browser.mjs')).playwrightDriver(profileDir()); }
-    catch (e) { log(`x-replies: playwright unavailable, skipped (${String(e.message).slice(0, 80)})`); return { status: 'skipped', urls: [] }; }
+    try { drv = await (await import('./x-browser-bsk.mjs')).bskDriver(); }
+    catch (e) { log(`x-replies: skipped (${String(e.message).slice(0, 80)})`); return { status: 'skipped', urls: [] }; }
   }
   if (budget) budget.xreplies--;
   try {

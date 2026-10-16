@@ -89,3 +89,17 @@ test('trigger: reply hint / tool / recent-without-resource-primary; scoring +2 /
   assert.match(mk('x_replies').resources[0].origin, /x_replies/);
   assert.equal(mk('x_replies_self').resources[0].origin, 'x_replies_self');
 });
+
+test('bsk driver: extracted posts -> parser-shaped html round-trips (no bsk needed)', async () => {
+  const { postsToHtml } = await import('../lib/x-browser-bsk.mjs');
+  const html = postsToHtml({ login: false, posts: [
+    { handle: 'a', name: 'A <b>', sid: '1', time: '2026-10-15T00:00:00.000Z', text: 'main', links: [] },
+    { handle: 'a', name: 'A <b>', sid: '2', time: '2026-10-15T00:01:00.000Z', text: 'x & y\nz', links: [{ href: 'https://t.co/AAA', text: 'hf.co', title: '' }] },
+  ] });
+  const { main, replies } = parseThread([html], '1');
+  assert.equal(main.handle, '@a');
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].text, 'x & y\nz');
+  assert.equal(replies[0].links[0].href, 'https://t.co/AAA');
+  assert.equal(detectLoginWall(postsToHtml({ login: true, posts: [] }), 'https://x.com/a'), true);
+});
