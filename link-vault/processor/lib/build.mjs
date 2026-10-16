@@ -5,7 +5,7 @@ import { buildAi } from './ai-build.mjs';
 // Pure function: returns { files: {relativePath: content} }.
 // Deleted links stay in index.json (flagged, so the app can show them in the trash) but are
 // left out of counts and of everything under knowledge/.
-export function buildOutputs({ records, analyses, categories, deleted = new Set(), latestEvents = new Map(), archives = new Map(), now = new Date() }) {
+export function buildOutputs({ records, analyses, categories, deleted = new Set(), latestEvents = new Map(), archives = new Map(), related = new Map(), now = new Date() }) {
   const byId = new Map(records.map((r) => [r.id, r]));
   const items = [];
   const extras = new Map(); // original id -> duplicate records
@@ -115,7 +115,7 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
     ].join('\n');
   }
   // ai/ is additive: index.json and knowledge/ above are unchanged by it.
-  Object.assign(files, buildAi({ items: visible, byId, analyses, archives, cats: used, lastChange, pendingCount }));
+  Object.assign(files, buildAi({ items: visible, byId, analyses, archives, cats: used, lastChange, pendingCount, related }));
   return { files, stats: { total: visible.length, deleted: items.length - visible.length, pending: pendingCount, categories: used.length } };
 }
 

@@ -74,7 +74,7 @@ function runClaude(bin, args, input, timeoutMs) {
   });
 }
 
-export function createClaudeCodeAnalyzer({ model, bin = 'claude', batchSize = 8, timeoutMs = 10 * 60 * 1000 }) {
+export function createClaudeCodeAnalyzer({ model, bin = 'claude', batchSize = 5, timeoutMs = 10 * 60 * 1000 }) {
   return {
     batchSize,
     // Returns Map<id, result | Error>

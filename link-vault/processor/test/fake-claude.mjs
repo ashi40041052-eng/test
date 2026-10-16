@@ -12,7 +12,11 @@ process.stdin.on('end', () => {
   // Test hook: simulate something happening while the AI is working (e.g. the phone pushing).
   if (process.env.FAKE_CLAUDE_HOOK) { execSync(process.env.FAKE_CLAUDE_HOOK, { stdio: 'ignore', shell: '/bin/bash' }); delete process.env.FAKE_CLAUDE_HOOK; }
   const ids = [...input.matchAll(/<link id="([^"]+)">/g)].map((m) => m[1]);
+  // v3: if a <subject> precedes the link's content, answer with it as the primary subject
+  const blocks = input.split('<link id="').slice(1);
   const results = ids.map((id, i) => ({
+    primary_subject: (() => { const m = blocks[i].match(/<subject type="(\w+)" url="([^"]*)"[^>]*>\n名前: ([^\n]*)/); return m && m[1] !== 'post' ? { kind: 'resource', url: m[2], name: m[3] } : { kind: 'self', url: null, name: '' }; })(),
+    resource_kind: /<subject type="github"/.test(blocks[i]) ? 'repository' : 'none',
     id, title: `見出し${i}`, summary: '要約', key_points: ['p'], category: 'AI活用',
     new_category_description: 'AIの使い方', tags: ['ai'], content_type: 'article', language: 'ja',
   }));

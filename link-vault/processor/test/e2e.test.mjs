@@ -103,7 +103,7 @@ test('claude-code backend: batches links through the CLI without an API key', as
     await run(process.execPath, [path.join(HERE, '..', 'process.mjs'), '--no-git'], { env });
 
     const calls = (await fs.readFile(logFile, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
-    assert.equal(calls.length, 2, '10 links -> 2 batches of up to 8');
+    assert.equal(calls.length, 2, '10 links -> 2 batches of up to 5');
     for (const c of calls) {
       assert.equal(c.hasApiKey, false, 'API key must be removed so the subscription is used');
       assert.ok(c.argv.includes('-p') && c.argv.includes('--json-schema'));

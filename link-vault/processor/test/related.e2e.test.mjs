@@ -200,3 +200,54 @@ test('failed resources keep related.json and are retried later', async () => {
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('analysis uses the subject; --reanalyze-related redoes only links that lack primary_subject', async () => {
+  const { server, base } = await fakeWorld();
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lv-rel-e2e-'));
+  const logFile = path.join(dir, 'fake-claude.log');
+  const link = async (e, t) => { const f = path.join(dir, `links/2026/10/${e.id}.json`); await fs.mkdir(path.dirname(f), { recursive: true }); await fs.writeFile(f, JSON.stringify({ id: e.id, url: `https://x.com/${e.user}/status/${e.sid}`, created_at: t })); };
+  await link(IDS.c07, '2026-10-16T10:00:00+09:00');
+  await link(IDS.self, '2026-10-16T10:01:00+09:00');
+  const env = {
+    ...process.env, LV_NO_ENV_FILE: '1', LV_DATA_DIR: dir, LV_BACKEND: 'claude-code', LV_CLAUDE_BIN: path.join(HERE, 'fake-claude.mjs'), FAKE_CLAUDE_LOG: logFile,
+    LV_FXTWITTER_BASE: `${base}/fx`, LV_GITHUB_BASE: `${base}/gh`, LV_HF_BASE: `${base}/hf`,
+  };
+  const proc = (...a) => run(process.execPath, [PROC, '--no-git', ...a], { env });
+  const ana = async (e) => JSON.parse(await fs.readFile(path.join(dir, 'analysis/2026', `${e.id}.json`), 'utf8'));
+  const calls = async () => (await fs.readFile(logFile, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  try {
+    await proc();
+    const a = await ana(IDS.c07);
+    assert.equal(a.primary_subject.kind, 'resource');
+    assert.equal(a.primary_subject.url, 'https://github.com/builderio/agent-native');
+    assert.equal(a.resource_kind, 'repository');
+    assert.equal(a.related_used.resources, 2);
+    assert.equal(a.primary_rule.kind, 'resource');
+    assert.equal((await ana(IDS.self)).primary_subject.kind, 'self');
+    const first = await calls();
+    assert.equal(first.length, 1);
+    assert.ok(first[0].input.indexOf('<subject') < first[0].input.indexOf('<content'), 'subject comes before content');
+    assert.match(first[0].input, /<context>/);
+    const md = await fs.readFile(path.join(dir, 'ai/links/2026', `${IDS.c07.id}.md`), 'utf8');
+    assert.ok(md.indexOf('## 主題リソース') > 0 && md.indexOf('## 主題リソース') < md.indexOf('## 文脈') && md.indexOf('## 文脈') < md.indexOf('## 本文'));
+    assert.match(md, /primary_name: BuilderIO\/agent-native/);
+    const man = (await fs.readFile(path.join(dir, 'ai/manifest.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+    assert.equal(man.find((m) => m.id === IDS.c07.id).pk, 'r');
+
+    // nothing to re-analyze while both have primary_subject
+    await proc('--reanalyze-related');
+    assert.equal((await calls()).length, 1);
+    // drop primary_subject from one analysis (a v2-era analysis) -> only that one is redone
+    const f = path.join(dir, 'analysis/2026', `${IDS.c07.id}.json`);
+    const old = await ana(IDS.c07); delete old.primary_subject; delete old.resource_kind;
+    await fs.writeFile(f, JSON.stringify(old));
+    await proc('--reanalyze-related');
+    const after = await calls();
+    assert.equal(after.length, 2);
+    assert.ok(after[1].input.includes(IDS.c07.id) && !after[1].input.includes(IDS.self.id));
+    assert.equal((await ana(IDS.c07)).primary_subject.kind, 'resource');
+  } finally {
+    server.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
