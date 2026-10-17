@@ -3,7 +3,7 @@
   'use strict';
 
   // "#id=..&cat=..&q=.." <-> object. Only known keys are kept.
-  const KEYS = ['id', 'cat', 'tag', 'q', 'per', 'st', 'trash', 'sub'];
+  const KEYS = ['id', 'cat', 'tag', 'q', 'per', 'st', 'trash', 'sub', 'mk'];
   function parseHash(hash) {
     const out = {};
     const p = new URLSearchParams(String(hash || '').replace(/^#/, ''));
@@ -47,6 +47,8 @@
       if (f.per && PERIODS[f.per] && t0 - new Date(it.created_at).getTime() > PERIODS[f.per]) return false;
       const meta = metaOf(it.id);
       if (f.sub && ((meta && meta.pk) || '-') !== f.sub) return false;
+      if (f.mk === 'todo' && it.mark === 'done') return false;
+      if (f.mk === 'done' && it.mark !== 'done') return false;
       if (f.st === 'pending' && it.status === 'analyzed') return false;
       if (f.st === 'analyzed' && it.status !== 'analyzed') return false;
       if (f.st === 'archived' && !(meta && meta.ar)) return false;
@@ -67,6 +69,13 @@
     });
     const sort = (m) => Array.from(m, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ja'));
     return { cats: sort(cats), tags: sort(tags), subs: Array.from(subs, ([key, count]) => ({ key, count })).sort((a, b) => (a.key === '-') - (b.key === '-') || b.count - a.count) };
+  }
+
+  // Counts for the 対応 filter from the trash-filtered list (a missing mark is todo).
+  function markCounts(items) {
+    let done = 0;
+    items.forEach((it) => { if (it.mark === 'done') done++; });
+    return { all: items.length, todo: items.length - done, done: done };
   }
 
   function parseManifest(text) {
@@ -227,5 +236,5 @@
     return { thread, resources, cards: resourceCards(rel, aiPrimary), rest, replies: others, primary, pk, hasContext: thread.length > 1 || resources.length > 0 || others.length > 0, counts: { posts: rel.posts.length, resources: resources.length, replies: others.length } };
   }
 
-  g.DashLogic = { TYPE_PK, resourceCards, resourceWhere, resourceTitle, PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost, threadShowsQuote };
+  g.DashLogic = { markCounts, TYPE_PK, resourceCards, resourceWhere, resourceTitle, PK, pkInfo, subjectLabel, relatedView, parseHash, buildHash, matchesQuery, filterItems, facets, parseManifest, step, firstLocalMedia, keepSelection, xrStatusText, threadShowsPost, threadShowsQuote };
 })(typeof self !== 'undefined' ? self : globalThis);

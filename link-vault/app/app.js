@@ -169,8 +169,9 @@
     const note = it.note ? '<p class="note">📝 ' + esc(it.note) + '</p>' : '';
     const cat = analyzed && it.category ? '<button type="button" class="chip cat" data-cat="' + esc(it.category) + '">' + esc(it.category) + '</button>' : '';
     const tags = analyzed && it.tags ? it.tags.map((t) => '<span class="chip">#' + esc(t) + '</span>').join('') : '';
+    const doneMark = it.mark === 'done' ? '<span class="chip" title="対応済み">✓ 対応済み</span>' : ''; // read-only: set on the PC
     return '<li class="item">' + head + summary + points + note +
-      '<div class="foot">' + cat + tags + '<span>' + esc(fmtDate(it.created_at)) + '</span>' + (inTrash ? '' : statusChip(local, it)) +
+      '<div class="foot">' + cat + tags + '<span>' + esc(fmtDate(it.created_at)) + '</span>' + doneMark + (inTrash ? '' : statusChip(local, it)) +
       (inTrash
         ? '<button type="button" class="act" data-restore="' + esc(it.id) + '">↩ 戻す</button>'
         : '<button type="button" class="act" data-del="' + esc(it.id) + '" aria-label="削除">🗑</button>') +

@@ -272,6 +272,17 @@ async function loadLatestEvents(dir) {
   return latest;
 }
 
+// marks/<id>.json {status:'done'|'todo', at}: one file per link, written by the PC dashboard. Missing = todo.
+async function loadMarks(dir) {
+  const m = new Map();
+  for (const f of await walkJson(path.join(dir, 'marks'))) {
+    const x = await readJson(f, null);
+    const id = path.basename(f, '.json');
+    if (x && (x.status === 'done' || x.status === 'todo')) m.set(id, x.status);
+  }
+  return m;
+}
+
 async function loadAnalyses(dir) {
   const m = new Map();
   for (const f of await walkJson(path.join(dir, 'analysis'))) {
@@ -488,7 +499,7 @@ async function main() {
 
     if (!CONFIG.archiveOnly) await writeIfChanged(catFile, JSON.stringify(categories, null, 2) + '\n');
 
-    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records), related: await loadRelatedAll(dir, records), xrepliesStatus: await readJson(statusFile(), null) });
+    const { files, stats } = buildOutputs({ records, analyses, categories, deleted, latestEvents, archives: await loadArchives(dir, records), related: await loadRelatedAll(dir, records), xrepliesStatus: await readJson(statusFile(), null), marks: await loadMarks(dir) });
     // knowledge/categories is fully generated: remove files for categories that no longer exist.
     const catDir = path.join(dir, 'knowledge', 'categories');
     if (fssync.existsSync(catDir)) {
@@ -520,7 +531,7 @@ async function main() {
       await writeIfChanged(indexFile, files['index.json']);
     }
 
-    log(`done: analyzed=${analyzed} failed=${failed} total=${stats.total} pending=${stats.pending} categories=${stats.categories}`);
+    log(`done: analyzed=${analyzed} failed=${failed} total=${stats.total} pending=${stats.pending} categories=${stats.categories} todo=${stats.todo}`);
 
     if (CONFIG.useGit) {
       const pushed = gitCommitAndPush(CONFIG.archiveOnly

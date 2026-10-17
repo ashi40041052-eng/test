@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "mark": "node processor/mark.mjs",
     "verify:phone": "node app/test/e2e-send.mjs",
     "test:app": "node --test app/test/core.test.mjs app/test/dash-logic.test.mjs"
   }

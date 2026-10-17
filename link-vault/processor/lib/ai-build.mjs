@@ -181,6 +181,7 @@ export function linkMarkdown(item, record, analysis, snap, bundle = null) {
     `tags: ${yamlList(item.tags)}`,
     `language: ${yamlScalar(f.language)}`,
     `status: ${item.status}`,
+    `mark: ${item.mark === 'done' ? 'done' : 'todo'}`,
     `archived: ${!!snap}`,
     `archive: ${yamlScalar(archiveDir)}`,
     `media: ${f.mediaCount}`,
@@ -252,7 +253,7 @@ export function manifestLine(item, analysis, snap, record, bundle = null) {
   const max = subj ? MANIFEST_RELATED_MAX_BYTES : MANIFEST_MAX_BYTES;
   const o = {
     id: item.id, t: f.title, c: item.category || null, g: (item.tags || []).map((x) => String(x).slice(0, 24)),
-    a: f.author, d: ymd(item.created_at), p: ymd(f.published_at), s: f.source_type, st: item.status,
+    a: f.author, d: ymd(item.created_at), p: ymd(f.published_at), s: f.source_type, st: item.status, mk: item.mark === 'done' ? 'done' : 'todo',
     ar: snap ? 1 : 0, f: `links/${year(item.id)}/${item.id}.md`,
   };
   if (subj) { o.pk = PK[subj.label] || '-'; o.pu = subj.url; if (subj.name) o.pn = oneLine(subj.name, 60); }
@@ -292,6 +293,7 @@ const SCHEMA_MD = `# Link Vault ai/ スキーマ
 | published_at / saved_at | 公開日時 / 保存日時 |
 | category / tags / language | 分析によるカテゴリ・タグ・言語 |
 | status | analyzed / pending / failed |
+| mark | 対応状況。done=対応済み / todo=未対応(印が無ければ todo)。元データは \`marks/<id>.json\` = {status, at, by:"ai"|"human", note?} |
 | archived | archive/ にスナップショットがあるか |
 | archive | アーカイブのディレクトリへの相対パス(media/ に画像) |
 | media | ローカル保存済みの画像・動画の数 |
@@ -315,7 +317,11 @@ const SCHEMA_MD = `# Link Vault ai/ スキーマ
 
 ## manifest.jsonl
 
-1 行 1 リンク(新しい順)。キー: id, t=title, c=category, g=tags, a=author, d=保存日, p=公開日, s=source_type, st=status, ar=archived(0/1), f=\`ai/\` 基準の相対パス。関連情報があるリンクは pk=主題の種類(r=リポジトリ m=モデル/データセット p=論文 s=サイト v=動画 x=ポスト -=なし)と pu=主題のURL(短縮しない)・pn=主題の名前(リポジトリ名・モデル名など。主題が自己/不明なら無し)も持つ(1行640バイトまで)。主題だけを種類別に見たいときは subjects.md。
+1 行 1 リンク(新しい順)。キー: id, t=title, c=category, g=tags, a=author, d=保存日, p=公開日, s=source_type, st=status(分析状態), mk=対応状況(done/todo), ar=archived(0/1), f=\`ai/\` 基準の相対パス。関連情報があるリンクは pk=主題の種類(r=リポジトリ m=モデル/データセット p=論文 s=サイト v=動画 x=ポスト -=なし)と pu=主題のURL(短縮しない)・pn=主題の名前(リポジトリ名・モデル名など。主題が自己/不明なら無し)も持つ(1行640バイトまで)。主題だけを種類別に見たいときは subjects.md。
+
+## 対応済みの付け方
+
+\`node link-vault/processor/mark.mjs <id|URL>... done|todo [--note "メモ"]\` (または processor で \`npm run mark -- <id|URL> done\`)。\`marks/<id>.json\` を書き、commit と push まで行います。手で marks/ を編集しても構いません(形式は上の mark 項目)。manifest.jsonl の mk が対応状況(\`"mk":"todo"\` で未対応を抽出)。st は分析状態です。
 
 ## その他
 
@@ -414,7 +420,10 @@ export function buildAi({ items, byId, analyses, archives, cats, lastChange, pen
     '1. 最近の話題 → recent.md  2. テーマ別 → categories/<名>.md  3. 検索 → manifest.jsonl を grep(t,g,a)  4. 全文 → links/<yyyy>/<id>.md',
     '   画像は links/*.md 内の相対パス。項目定義は schema.md。',
     '   主題リソース(リポジトリ/モデル)で探す → manifest.jsonl の pu/pn を grep、または subjects.md(種類別の一覧)。',
-    `## 統計  総数 ${items.length} / 未分析 ${pendingCount} / アーカイブ済み ${archivedCount} / 最終更新 ${lastChange || '-'}`,
+    '## 対応済みにする方法(How to mark a link 対応済み)',
+    '   対応を終えたリンクは: `node link-vault/processor/mark.mjs <id|URL> done --note "何をしたか"`(未対応に戻す: `todo`。複数 id 可。commit/push まで自動)。',
+    '   未対応だけ見る → manifest.jsonl を `"mk":"todo"` で grep(印が無いリンクは todo)。',
+    `## 統計  総数 ${items.length} / 未分析 ${pendingCount} / アーカイブ済み ${archivedCount} / 未対応 ${items.filter((i) => i.mark !== 'done').length} / 最終更新 ${lastChange || '-'}`,
     ...(xrepliesStatus ? [`## リプ取得  ${xrepliesLine(xrepliesStatus)}`] : []),
     '## カテゴリ',
   ];

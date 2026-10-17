@@ -11,6 +11,7 @@
     "process": "node process.mjs",
     "rebuild": "node process.mjs --no-ai",
     "archive": "node process.mjs --archive-only",
+    "mark": "node mark.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

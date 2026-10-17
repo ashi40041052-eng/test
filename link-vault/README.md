@@ -245,3 +245,10 @@ node process.mjs                                 # 通常実行は related の�
 bash test/record-fixtures.sh                     # テスト用の実 API 応答（fxtwitter v2・GitHub・HF・arXiv・YouTube）を録り直す
 # テスト用の環境変数: LV_FXTWITTER_BASE（fxtwitter の代わり）, LV_GITHUB_BASE / LV_HF_BASE / LV_ARXIV_BASE / LV_YOUTUBE_BASE, LV_NO_ENV_FILE=1, LV_LOCK_FILE=<path>
 ```
+
+## 対応済み / 未対応 (marks)
+
+- 保存先: データリポジトリの `marks/<id>.json` = `{status:"done"|"todo", at, by:"ai"|"human", note?}`(1リンク1ファイル。ファイルが無い = 未対応)。
+- AI/CLI: `node processor/mark.mjs <id|URL>... done|todo [--note "..."]`(`npm run mark -- ...`)。processor と同じロックで pull --rebase → `marks/` だけ commit → push。
+- PC ダッシュボード: 詳細の大ボタン / キー `x` / 左の「対応」フィルタ(URL ハッシュ `mk=`)。`POST /api/mark`(127.0.0.1 のみ)は `marks/` に書くだけで、commit・push は20分ごとの archive 実行が行う(git ロックと競合しないため)。
+- 出力: index.json の `mark`、`ai/manifest.jsonl` の `mk`(`st` は従来どおり分析状態)、`ai/links/*.md` の `mark:`、`llms.txt` の統計「未対応 N」。スマホは一覧に ✓ 表示のみ。

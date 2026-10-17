@@ -1,7 +1,7 @@
 /* Link Vault service worker: offline app shell + background sync. */
 importScripts('./core.js');
 
-const CACHE = 'lv-shell-v5';
+const CACHE = 'lv-shell-v6';
 const SHELL_MARKER = 'id="pasteBtn"'; // present only in this app's index.html
 const SHELL = ['./', './index.html', './style.css', './core.js', './app.js', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
