@@ -196,3 +196,17 @@ test('resourceCards works on related.json alone: a resource without any AI readi
 test('search finds the tldr', () => {
   assert.equal(DL.matchesQuery({ title: 'a', tldr: '人とAIが同じ画面' }, null, 'AIが同じ'), true);
 });
+
+test('mark filter (対応) and counts; missing mark counts as todo; kept in the hash', () => {
+  const items = [
+    { id: 'a', created_at: '2026-10-01T00:00:00Z', mark: 'done' },
+    { id: 'b', created_at: '2026-10-02T00:00:00Z', mark: 'todo' },
+    { id: 'c', created_at: '2026-10-03T00:00:00Z' },
+  ];
+  const run = (f) => DL.filterItems(items, f, () => false, () => undefined, NOW).map((i) => i.id);
+  assert.deepEqual(run({}), ['a', 'b', 'c']);
+  assert.deepEqual(run({ mk: 'done' }), ['a']);
+  assert.deepEqual(run({ mk: 'todo' }), ['b', 'c']);
+  assert.deepEqual(DL.markCounts(items), { all: 3, todo: 2, done: 1 });
+  assert.equal(DL.parseHash(DL.buildHash({ mk: 'todo', id: 'b' })).mk, 'todo');
+});

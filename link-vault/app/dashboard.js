@@ -19,7 +19,7 @@
   const LOCAL = !MOCK && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const FILE_BASE = MOCK ? 'fixtures/mock/' : LOCAL ? '/data/' : null;
   const DAY_MS = 86400000;
-  const state = { index: null, manifest: new Map(), filters: {}, sel: null, view: [], events: new Map(), cfg: null };
+  const state = { index: null, manifest: new Map(), marks: {}, filters: {}, sel: null, view: [], events: new Map(), cfg: null };
   const urlCache = new Map(); // path -> object URL (this page load)
 
   // ---------- helpers ----------
@@ -91,6 +91,9 @@
     }
     // manifest says which links are archived: the refresh button must see new archives, not the day-old cache
     state.xr = LOCAL ? await fetch('/logs/x-replies-status.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
+    // 対応済み marks: the local server has the live files; the index (rebuilt every 20 min) is the fallback elsewhere
+    state.marks = LOCAL ? await fetch('/api/marks', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({})) : {};
+    if (LOCAL && state.index) state.index.items.forEach((it) => { it.mark = state.marks[it.id] && state.marks[it.id].status === 'done' ? 'done' : 'todo'; });
     try { state.manifest = DL.parseManifest(await read('ai/manifest.jsonl', 'text', network === 'fresh')); } catch (e) { state.manifest = new Map(); }
     return true;
   }
@@ -108,13 +111,13 @@
   // ---------- state <-> URL ----------
   function readHash() {
     const h = DL.parseHash(location.hash);
-    state.filters = { cat: h.cat, tag: h.tag, q: h.q, per: h.per, st: h.st, trash: h.trash === '1' ? '1' : '', sub: h.sub };
+    state.filters = { cat: h.cat, tag: h.tag, q: h.q, per: h.per, st: h.st, trash: h.trash === '1' ? '1' : '', sub: h.sub, mk: h.mk === 'todo' || h.mk === 'done' ? h.mk : '' };
     state.sel = h.id || null;
     $('#q').value = h.q || '';
   }
   function writeHash() {
     const f = state.filters;
-    const h = DL.buildHash({ id: state.sel, cat: f.cat, tag: f.tag, q: f.q, per: f.per, st: f.st, trash: f.trash, sub: f.sub });
+    const h = DL.buildHash({ id: state.sel, cat: f.cat, tag: f.tag, q: f.q, per: f.per, st: f.st, trash: f.trash, sub: f.sub, mk: f.mk });
     history.replaceState(null, '', location.pathname + location.search + h);
   }
 
@@ -132,9 +135,11 @@
     const fc = DL.facets(visibleBase(), metaOf);
     const opt = (key, val, label, n) => '<button type="button" class="fopt' + ((f[key] || '') === val ? ' on' : '') + '" data-k="' + key + '" data-v="' + esc(val) + '"><span>' + esc(label) + '</span>' + (n == null ? '' : '<span class="n">' + n + '</span>') + '</button>';
     const total = visibleBase().length;
+    const mc = DL.markCounts(visibleBase());
     $('#side').innerHTML =
       '<h3>カテゴリ</h3>' + opt('cat', '', 'すべて', total) + fc.cats.map((c) => opt('cat', c.name, c.name, c.count)).join('') +
       (fc.subs.length ? '<h3>主題の種類</h3>' + opt('sub', '', 'すべて', null) + fc.subs.map((x) => opt('sub', x.key, (DL.pkInfo(x.key) || ['', x.key]).join(' '), x.count)).join('') : '') +
+      '<h3>対応</h3>' + [['', 'すべて', mc.all], ['todo', '未対応', mc.todo], ['done', '対応済み', mc.done]].map(([v, l, n]) => opt('mk', v, l, n)).join('') +
       '<h3>期間</h3>' + [['', 'すべて'], ['7', '7日'], ['30', '30日'], ['365', '1年']].map(([v, l]) => opt('per', v, l)).join('') +
       '<h3>状態</h3>' + [['', 'すべて'], ['pending', '未分析'], ['analyzed', '分析済み'], ['archived', 'アーカイブ済み'], ['unarchived', '未アーカイブ']].map(([v, l]) => opt('st', v, l)).join('') +
       '<h3>タグ</h3><div class="tagcloud">' + fc.tags.slice(0, 40).map((t) => opt('tag', t.name, t.name, t.count)).join('') + '</div>' +
@@ -154,8 +159,8 @@
       const ic = DL.pkInfo(DL.TYPE_PK[r.type] || 's');
       return '<a class="rchip" href="' + esc(safeHref(r.url)) + '" target="_blank" rel="noopener noreferrer" title="' + esc(r.url) + '">' + (ic ? ic[0] + ' ' : '') + esc(r.name || shortUrl(r.url)) + '</a>';
     }).join('') + ((it.res_n || 0) > it.res.length ? '<span class="rmore">+' + (it.res_n - it.res.length) + '</span>' : '') + '</div>' : '';
-    return '<div class="card' + (it.id === state.sel ? ' sel' : '') + '" data-id="' + esc(it.id) + '">' +
-      '<div class="t">' + esc(titleOf(it)) + '</div>' +
+    return '<div class="card' + (it.id === state.sel ? ' sel' : '') + (it.mark === 'done' ? ' done' : '') + '" data-id="' + esc(it.id) + '">' +
+      '<div class="t">' + (it.mark === 'done' ? '<span class="mk-badge" title="対応済み">✓</span> ' : '') + esc(titleOf(it)) + '</div>' +
       '<div class="s">' + esc(it.tldr || it.summary || it.note || it.url || '') + '</div>' + subj + chipsRow +
       ((meta && meta.ar) ? '<img class="thumb" alt="" data-thumb="' + esc(it.id) + '">' : '<span></span>') +
       '<div class="m">' + status + arch + (au ? '<span>' + esc(au) + '</span>' : '') + '<span>' + esc(fmtDate(it.created_at)) + '</span>' +
@@ -206,7 +211,7 @@
       '<span>保存 ' + esc(fmtDate(it.created_at, true)) + '</span>' +
       (it.category ? '<span>' + esc(it.category) + '</span>' : '') +
       '<span>' + (it.status === 'analyzed' ? '分析済み' : it.status === 'failed' ? '分析失敗' : '未分析') + '</span>' +
-      (del ? '<span class="err">ゴミ箱</span>' : '') + '</div>' +
+      (del ? '<span class="err">ゴミ箱</span>' : '') + markMeta(id) + '</div>' +
       (it.url ? '<div><a href="' + esc(safeHref(it.url)) + '" target="_blank" rel="noopener noreferrer">' + esc(shortUrl(it.url)) + '</a></div>' : '') +
       (it.tags && it.tags.length ? '<div style="margin-top:6px">' + chips(it.tags) + '</div>' : '');
     // v4 order (DESIGN-v4.md section 3, resources moved to the very top at the user's request):
@@ -218,7 +223,7 @@
       (it.summary ? '<h4>要約</h4><details class="fold"' + (folded ? '' : ' open') + '><summary>要約を表示</summary><div class="prose">' + esc(it.summary) + '</div></details>' : '');
     const actions = '<div class="actions"><button type="button" data-act="trash">' + (del ? '戻す (d)' : 'ゴミ箱へ (d)') + '</button>' +
       (it.url ? '<button type="button" data-act="open">元URLを開く (o)</button>' : '') + '</div>';
-    box.innerHTML = '<div id="resBox"></div>' + head + analysis + '<div id="thrBox"></div><h4>アーカイブ / メディア</h4><details class="fold" id="archFold"><summary>取得情報とメディアを表示</summary><div id="archBox" class="muted">読み込み中…</div></details>' + actions;
+    box.innerHTML = markBar(it) + '<div id="resBox"></div>' + head + analysis + '<div id="thrBox"></div><h4>アーカイブ / メディア</h4><details class="fold" id="archFold"><summary>取得情報とメディアを表示</summary><div id="archBox" class="muted">読み込み中…</div></details>' + actions;
     box.scrollTop = 0;
     const relDone = renderRelated(id); // resolves true when the thread (which already shows the saved post) was drawn
     let snap = null, errMsg = '';
@@ -373,6 +378,42 @@
     renderDetail();
   }
 
+  // ---------- 対応済み / 未対応 ----------
+  // GitHub Pages mode has no write path: the badge is read-only there (from index.json), no button.
+  function markMeta(id) {
+    const m = state.marks[id];
+    return m && m.status === 'done' ? '<span>' + (m.by === 'ai' ? 'AI' : m.by === 'human' ? '手動' : '') + '対応 ' + esc(fmtDate(m.at, true)) + '</span>' + (m.note ? '<span class="mk-note">' + esc(m.note) + '</span>' : '') : '';
+  }
+  function markBar(it) {
+    if (!LOCAL && !MOCK) return it.mark === 'done' ? '<div class="markbar"><span class="mk-big on">✓ 対応済み</span></div>' : '';
+    const done = it.mark === 'done';
+    return '<div class="markbar"><button type="button" class="mk-big' + (done ? ' on' : '') + '" data-act="mark" title="切替 (x)">' + (done ? '✓ 対応済み' : '未対応') + ' <span class="mk-sw">⇄ ' + (done ? '未対応に戻す' : '対応済みにする') + ' (x)</span></button></div>';
+  }
+  async function toggleMark(id) {
+    const it = state.index && state.index.items.find((x) => x.id === id);
+    if (!it || (!LOCAL && !MOCK)) return;
+    const prev = it.mark === 'done' ? 'done' : 'todo', prevRec = state.marks[id], next = prev === 'done' ? 'todo' : 'done';
+    const idx = state.view.findIndex((x) => x.id === id);
+    const apply = (st, rec) => {
+      it.mark = st;
+      if (rec) state.marks[id] = rec; else delete state.marks[id];
+      recompute();
+      if (!state.view.some((x) => x.id === state.sel)) { const after = state.view[Math.min(idx, state.view.length - 1)]; state.sel = after ? after.id : null; }
+      renderSide(); renderList(); writeHash(); renderDetail();
+    };
+    apply(next, { status: next, at: new Date().toISOString(), by: 'human' }); // optimistic
+    if (MOCK) return;
+    try {
+      const r = await fetch('/api/mark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, status: next }) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const rec = await r.json();
+      state.marks[id] = rec; it.mark = rec.status;
+    } catch (e) {
+      apply(prev, prevRec); // rollback
+      toast('保存できませんでした（元に戻しました）: ' + e.message);
+    }
+  }
+
   // ---------- trash ----------
   async function toggleTrash(id) {
     const it = state.index.items.find((x) => x.id === id);
@@ -403,7 +444,7 @@
     $('#list').addEventListener('click', (e) => { const c = e.target.closest('.card'); if (c) select(c.dataset.id); });
     $('#detail').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-act]');
-      if (b) { if (b.dataset.act === 'trash') toggleTrash(state.sel); else openUrl(); return; }
+      if (b) { if (b.dataset.act === 'trash') toggleTrash(state.sel); else if (b.dataset.act === 'mark') toggleMark(state.sel); else openUrl(); return; }
       const sum = e.target.closest('details.readme > summary');
       if (sum) {
         const d = sum.parentElement;
@@ -436,6 +477,7 @@
       else if (k === 'j' || k === 'ArrowDown') { e.preventDefault(); move(1); }
       else if (k === 'k' || k === 'ArrowUp') { e.preventDefault(); move(-1); }
       else if (k === 'o') openUrl();
+      else if (k === 'x' && state.sel) toggleMark(state.sel);
       else if (k === 'd' && state.sel) toggleTrash(state.sel);
       else if (k === 't') setFilter('trash', state.filters.trash ? '' : '1');
       else if (k === 'r') init(true);

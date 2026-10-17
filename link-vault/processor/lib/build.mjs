@@ -9,7 +9,7 @@ const CHIPS = 3; // resource chips per list card (DESIGN-v4.md section 3)
 // Pure function: returns { files: {relativePath: content} }.
 // Deleted links stay in index.json (flagged, so the app can show them in the trash) but are
 // left out of counts and of everything under knowledge/.
-export function buildOutputs({ records, analyses, categories, deleted = new Set(), latestEvents = new Map(), archives = new Map(), related = new Map(), xrepliesStatus = null, now = new Date() }) {
+export function buildOutputs({ records, analyses, categories, deleted = new Set(), latestEvents = new Map(), archives = new Map(), related = new Map(), xrepliesStatus = null, marks = new Map(), now = new Date() }) {
   const byId = new Map(records.map((r) => [r.id, r]));
   const items = [];
   const extras = new Map(); // original id -> duplicate records
@@ -33,6 +33,8 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
       note: [...new Set(notes)].join(' / ') || null,
       created_at: r.created_at,
       status: a?.status === 'analyzed' ? 'analyzed' : a?.status === 'failed' ? 'failed' : 'pending',
+      // user's own 対応済み/未対応 mark (marks/<id>.json); a missing mark is todo
+      mark: marks.get(r.id) === 'done' ? 'done' : 'todo',
     };
     if (dups.length) item.also_saved_at = dups.map((d) => d.created_at);
     if (deleted.has(r.id)) item.deleted = true;
@@ -134,7 +136,7 @@ export function buildOutputs({ records, analyses, categories, deleted = new Set(
   }
   // ai/ is additive: index.json and knowledge/ above are unchanged by it.
   Object.assign(files, buildAi({ items: visible, byId, analyses, archives, cats: used, lastChange, pendingCount, related, xrepliesStatus }));
-  return { files, stats: { total: visible.length, deleted: items.length - visible.length, pending: pendingCount, categories: used.length } };
+  return { files, stats: { total: visible.length, todo: visible.filter((i) => i.mark !== 'done').length, deleted: items.length - visible.length, pending: pendingCount, categories: used.length } };
 }
 
 function groupByMonth(items) {

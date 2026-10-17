@@ -7,6 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeMark, readMarks } from './lib/marks.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const envFile = path.join(HERE, '.env');
@@ -27,7 +28,26 @@ function resolveUnder(root, rel) {
   return p === root || p.startsWith(root + path.sep) ? p : null;
 }
 
+const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(obj)); };
+// loopback peer + loopback Host + JSON content type (the last forces a CORS preflight, so other web pages cannot post here)
+const isLocalReq = (req) => /^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress || '') && /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(req.headers.host || '');
+
+// Marks are only written to marks/<id>.json here. Committing/pushing is left to the 20-min archive run
+// (process.mjs commits everything except links/ and events/), so this server never races its git lock.
+async function handleMark(req, res) {
+  if (!isLocalReq(req) || !String(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 403, { error: 'forbidden' });
+  let body = '';
+  for await (const c of req) { body += c; if (body.length > 4096) return json(res, 413, { error: 'too large' }); }
+  let b;
+  try { b = JSON.parse(body); } catch { return json(res, 400, { error: 'bad json' }); }
+  if (!b || typeof b.id !== 'string' || (b.status !== 'done' && b.status !== 'todo')) return json(res, 400, { error: 'bad request' });
+  try { json(res, 200, { id: b.id, ...(await writeMark(DATA_DIR, b.id, b.status, { by: 'human' })) }); }
+  catch (e) { json(res, /unknown|bad id/.test(e.message) ? 400 : 500, { error: e.message }); }
+}
+
 http.createServer((req, res) => {
+  if (req.url === '/api/mark' && req.method === 'POST') { handleMark(req, res).catch(() => json(res, 500, { error: 'failed' })); return; }
+  if (req.url === '/api/marks' && req.method === 'GET') { if (!isLocalReq(req)) return json(res, 403, { error: 'forbidden' }); readMarks(DATA_DIR).then((m) => json(res, 200, m), () => json(res, 500, {})); return; }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
   let rel;
   try { rel = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400).end(); return; }
